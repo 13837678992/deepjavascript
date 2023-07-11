@@ -1,2 +1,2 @@
-# deepjavascript
-javascript相关书籍笔记
+# 《JavaScript 权威指南第七版》
+### 
