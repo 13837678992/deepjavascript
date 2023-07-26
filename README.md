@@ -2,12 +2,16 @@
 ## [在线阅读](https://js.okten.cn/posts/)
 ## [github项目](https://github.com/ten-ltw/JavaScript-The-Definitive-Guide-7th-zh)
 > 前言：`node：18.8.0`、 `"performance-now": "^2.1.0"`
+## 3 类型、值和变量
 ### 3.7 The Global Object
 > ES2020 最终定义了 `globalThis` 作为在任何上下文中引用全局对象的标准方式。到 2020 年初，所有现代浏览器和 Node 都实现了该特性。
-#### 3.9.3 类型转换
+### 3.9 类型转换
+#### 3.9.3 对象到原始类型的转换
 > + prefer-string算法首先尝试toString()方法。如果该方法被定义并返回一个原语值，那么JavaScript将使用该原语值(即使它不是字符串!)如果toString()不存在或者它返回一个对象，那么JavaScript会尝试valueOf()方法。如果该方法存在并返回一个原始值，那么JavaScript将使用该值。否则，转换将失败，并出现TypeError。
 > + prefer-number算法的工作原理与prefer-string算法相似，不同之处是它首先尝试valueOf()，然后尝试toString()。
 > + 无优先级算法取决于被转换对象的类。如果对象是Date对象，那么JavaScript使用prefer-string算法。对于任何其他对象，JavaScript都使用prefer-number算法。
+## 4 表达式和运算符
+### 4.5 调用表达式
 #### 4.5.1 条件调用
 
 ```js
@@ -36,6 +40,7 @@ const undefinedPerson = {
 };
 undefinedPerson.greet?.(); // 调用不存在的函数
 ```
+### 4.9 关系表达式
 #### 4.9.3 in 运算符
 > `in` 运算符需要一个左侧操作数，该操作数是字符串、符号或可以转换为字符串的值。它需要一个作为对象的右侧操作数。如果左侧值是右侧对象的属性名称，则其计算结果为 true。例如
 ```js
@@ -50,6 +55,8 @@ undefinedPerson.greet?.(); // 调用不存在的函数
     3 in data                  // => false: no element 3
     
 ```
+## 5 语句
+### 5.3 条件句
 #### 5.3.3 switch
 > 请注意，对于`switch`来说，case 关键字后面一般跟有数字或字符串。这是实践中最经常使用 switch 语句的方式，但是请注意，ECMAScript 标准允许每种情况后面都可以有一个任意表达式。
 ```js
@@ -120,6 +127,8 @@ async function fetchData(url) {
   }
 })();
 ```
+### 5.5 Jumps
+
 #### 5.5.1 标记语句
 任何语句都可以在其前面加上标识符和冒号来标记。
 eg：标识符配合break和continue使用
@@ -149,7 +158,8 @@ outerLoop: // 这是一个标识符
 
 
 ```
-## 测试属性
+## 6 对象
+### 6.5 测试属性
 + in
 > in 运算符的左侧是属性名，右侧是对象。如果对象的自有属性或继承属性中包含这个属性则返回 true：
 ```js
@@ -175,6 +185,7 @@ o.propertyIsEnumerable("x")  // => true: o has an own enumerable property x
 o.propertyIsEnumerable("toString")  // => false: not an own property
 Object.prototype.propertyIsEnumerable("toString") // => false: not enumerable
 ```
+### 6.6 枚举属性
 #### 6.6.1属性枚举顺序
 > ES6 正式定义元素的自有属性的枚举顺序。`Object.keys()`、`Object.values()`、`Object.getOwnPropertyNames()`、`Object.getOwnPropertyNames()`、`Object.getOwnPropertySymbols()`、`Reflect.ownKeys()` 和相关方法如 `JSON.stringify()` 属性列表都按以下顺序排列的，受它们自身是否是不可枚举属性列表或者属性是字符串或者 Symbol 影响：
 
@@ -218,7 +229,7 @@ console.log(Reflect.ownKeys(objCombined));
 // 输出： [ '1', '10', 'b', 'a', Symbol(a), Symbol(b) ]
 
 ```
-
+### 6.10 扩展对象文字语法
 #### 6.10.4 运算符
 + ...运算符
 > 在 ES2018 之后，可以使用展开运算符 `…` 将现有的对象中的属性复制到新的对象中：
@@ -312,6 +323,7 @@ console.log('Memory increase after assign: ', (afterAssignMemoryUsage.heapUsed -
 // 对于深层对象，`Object.assign()` 方法的性能优于展开运算符 ，而且内存占用更少。
 ```
 > 这里的测试都是给予`node 18.8.0`版本的，如果是其他版本，可能会有不同，在14.17.5版本测试发现对于深层拷贝对于内存的占用展开运算符是`Object.assign()` 方法的5倍以上。
+## 7 数组
 ### 7.1 数组的创建
 + Array 构造函数
 + 数组字面量
@@ -333,6 +345,7 @@ var array = Array.from(arrayLike);
 console.log(array); // ['a', 'b', 'c']
     
 ```
+### 7.8 数组方法
 #### 7.8.6 Array Searching and Sorting Methods
 + `includes() findeIndex() some()`
 > `includes()` 方法用来判断一个数组是否包含一个指定的值，如果是返回 true，否则false。但是在实际的业务中，我们更关心的是数组中是否包含某个对象，而不是某个值。这时候我们可以使用 `Array.prototype.some()`或者`Array.prototype.findIndex()` 方法来实现：
@@ -582,3 +595,121 @@ Array.from(a)                      // => ["a","b","c"]: easier array copy
 Array.prototype.join.call("JavaScript", " ")  // => "J a v a S c r i p t"
 ```
 > 请记住，字符串是不可变值，因此当字符串被视为数组时，它们是只读数组。数组方法 push()、sort()、reverse() 和 splice() 直接修改数组，它们不能处理字符串。但是，尝试使用数组方法修改字符串不会引发异常：它只是静默失败。
+
+## 8 函数
+### 8.6 闭包
+> 从技术的角度讲，所有的 `JavaScript` 函数都是闭包，但是大多数函数调用和定义在同一个作用域内，通常不会注意这里有涉及到闭包。当调用函数不和其定义处于同一作用域内时，事情就变得非常微妙。当一个函数嵌套了另外一个函数，外部函数将嵌套的函数对象作为返回值返回的时候往往会发生这种事情。
+```js
+function constfuncs() {
+  let funcs = [];
+  for (var i = 0; i < 10; i++) { // changed var to let
+    funcs[i] = () => i;
+  }
+  return funcs;
+}
+
+let funcs = constfuncs();
+console.log(funcs[5]()) // => 10
+
+
+let add = null
+{
+  {
+    var a = 2;
+    console.log(a);  //2
+    add = () => { console.log(a) } // 3
+  }
+  {
+    var a = 3;
+    console.log(a) //3
+  }
+  console.log(a) // 3
+}
+console.log(a)// 3
+add()
+```
+> 在`JavaScript`中，当创建一个函数并访问其外部作用域的变量时，函数实际上保存的是对这个变量的引用，而不是那个变量的值。这种行为产生的环境就是我们称之为"闭包"的东西。
+### 8.8 函数式编程
+#### 8.8.3 函数的部分应用
+> `bind()` 方法只是将实参放在（完整实参列表的）左侧，也就是说传入 `bind()` 的实参都是放在传入原始函数的实参列表开始的位置，但有时我们期望将传入 `bind()` 的实参放在（完整实参列表的）右侧：
+```js
+// 参数在左边传入
+function partialLeft(f, ...outerArgs) {
+    return function(...innerArgs) { // Return this function
+        let args = [...outerArgs, ...innerArgs]; // Build the argument list
+        return f.apply(this, args);              // Then invoke f with it
+    };
+}
+
+// 参数在右边传入
+function partialRight(f, ...outerArgs) {
+    return function(...innerArgs) {  // Return this function
+        let args = [...innerArgs, ...outerArgs]; // Build the argument list
+        return f.apply(this, args);              // Then invoke f with it
+    };
+}
+
+// 如果存在undefined就使用后传入的参数填入
+function partial(f, ...outerArgs) {
+    return function(...innerArgs) {
+        let args = [...outerArgs]; // local copy of outer args template
+        let innerIndex=0;          // which inner arg is next
+        // Loop through the args, filling in undefined values from inner args
+        for(let i = 0; i < args.length; i++) {
+            if (args[i] === undefined) args[i] = innerArgs[innerIndex++];
+        }
+        // Now append any remaining inner arguments
+        args.push(...innerArgs.slice(innerIndex));
+        return f.apply(this, args);
+    };
+}
+
+// Here is a function with three arguments
+const f = function(x,y,z) { return x * (y - z); };
+// Notice how these three partial applications differ
+partialLeft(f, 2)(3,4)         // => -2: Bind first argument: 2 * (3 - 4)
+partialRight(f, 2)(3,4)        // =>  6: Bind last argument: 3 * (4 - 2)
+partial(f, undefined, 2)(3,4)  // => -6: Bind middle argument: 3 * (2 - 4)
+```
+> 书本提供的一个有趣的练习：求平均数和标准差的代码，这种编码风格是非常纯粹的函数式编程：
+```js
+// sum() and square() functions are defined above. Here are some more:
+const map = function(a, ...args) { return a.map(...args); };
+const reduce = function(a, ...args) { return a.reduce(...args); };
+const product = (x,y) => x*y;
+const neg = partial(product, -1);
+const sqrt = partial(Math.pow, undefined, .5);
+const reciprocal = partial(Math.pow, undefined, neg(1));
+const sum = (x,y) => x+y;
+const square = x => x*x;
+
+function compose(f, g) {
+    return function(...args) {
+        // We use call for f because we're passing a single value and
+        // apply for g because we're passing an array of values.
+        return f.call(this, g.apply(this, args));
+    };
+}
+function partial(f, ...outerArgs) {
+    return function(...innerArgs) {
+        let args = [...outerArgs]; // local copy of outer args template
+        let innerIndex=0;          // which inner arg is next
+        // Loop through the args, filling in undefined values from inner args
+        for(let i = 0; i < args.length; i++) {
+            if (args[i] === undefined) args[i] = innerArgs[innerIndex++];
+        }
+        // Now append any remaining inner arguments
+        args.push(...innerArgs.slice(innerIndex));
+        return f.apply(this, args);
+    };
+}
+// Now compute the mean and standard deviation.
+let data = [1,1,3,5,5];   // Our data
+let mean = product(reduce(data, sum), reciprocal(data.length));
+let stddev = sqrt(product(reduce(map(data,
+                                     compose(square,
+                                             partial(sum, neg(mean)))),
+                                 sum),
+                          reciprocal(sum(data.length,neg(1)))));
+[mean, stddev]  // => [3, 2]
+```
