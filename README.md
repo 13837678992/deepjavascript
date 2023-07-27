@@ -713,3 +713,246 @@ let stddev = sqrt(product(reduce(map(data,
                           reciprocal(sum(data.length,neg(1)))));
 [mean, stddev]  // => [3, 2]
 ```
+
+
+## 9 class
+### 9.3 带有类关键字的类声明
+#### 9.3.3 Public, Private, and Static Fields
+> 假设你正在编写一个这样的类，其中一个构造函数初始化了三个字段：
+```js
+class Buffer {
+    constructor() {
+        this.size = 0;
+        this.capacity = 4096;
+        this.buffer = new Uint8Array(this.capacity);
+    }
+}
+```
+> 使用可能标准化的新实例字段语法，可以这样编写：
+```js
+class Buffer {
+    size = 0;
+    capacity = 4096;
+    buffer = new Uint8Array(this.capacity);
+}
+```
+
+> 字段初始化代码已移出构造函数，现在直接显示在类正文中。（当然，该代码仍作为构造函数的一部分运行。如果不定义构造函数，则字段初始化为隐式创建的构造函数的一部分。赋值左侧的 this. 前缀消失，但请注意即使是在初始化赋值的右侧，仍必须使用 this. 前缀引用这些字段。这种方式初始化实例字段的优点是，此语法允许（但不需要）将初始化放在类定义的顶部，使读者清楚地了解字段在每个实例将保存的状态。可以通过字段名后面跟一个分号来只声明不初始化一个字段。如果这样做，字段的初始值将是 undefined。显式设定初始化字段的值是比较好的风格。
+
+> 标准化中的实例字段同时也定义了私有实例字段。如果使用上例中所示的实例字段初始化语法来定义其名称以 # 开头的字段（在 JavaScript 标识符中通常不是合法字符），则该字段在类正文中可用（使用 # 前缀），但对类正文之外的任何代码不可见且不可访问（因此不可变）。如果对于前面的 Buffer 类，要确保类的用户不会无意中修改实例的 size 字段，可以改为使用私有 #size 字段，然后定义 getter 函数以提供对值的只读访问：
+```js
+class Buffer {
+    #size = 0; // 更加推荐 static ,并且只能在class正文里面定义 ，下面的定义就是错误的
+    get size() { return this.#size; }
+}
+// 错误示例
+class Buffer {
+    constructor() {
+        this.#size = 0;
+    }
+}
+```
+> 示例：Sets.js：抽象类和实体类的层次
+```js
+/**
+ * AbstractSet类定义了一个抽象方法has()。
+ */
+class AbstractSet {
+  // 在这里抛出一个错误，以强制子类定义自己的此方法的工作版本。
+  has(x) { throw new Error("抽象方法"); }
+}
+
+/**
+* NotSet是AbstractSet的一个具体子类。
+* 这个集合的成员是某个其他集合中不是成员的所有值。
+* 因为它是根据另一个集合定义的，所以它不可写，因为它有无穷个成员，所以它不可枚举。
+* 我们能做的就是测试成员资格并将它转换成字符串，用数学符号表示。
+*/
+class NotSet extends AbstractSet {
+  constructor(set) {
+    super();
+    this.set = set;
+  }
+
+  // 我们实现了继承的抽象方法
+  has(x) { return !this.set.has(x); }
+  // 我们也覆盖了这个Object方法
+  toString() { return `{ x| x ∉ ${this.set.toString()} }`; }
+}
+
+/**
+* RangeSet是AbstractSet的一个具体子类。它的成员是
+* 所有在from和to边界之间的值，包括边界值。
+* 因为它的成员可以是浮点数，所以它不可枚举，没有有意义的大小。
+*/
+class RangeSet extends AbstractSet {
+  constructor(from, to) {
+    super();
+    this.from = from;
+    this.to = to;
+  }
+
+  has(x) { return x >= this.from && x <= this.to; }
+  toString() { return `{ x| ${this.from} ≤ x ≤ ${this.to} }`; }
+}
+
+/*
+* AbstractEnumerableSet是AbstractSet的一个抽象子类。 它定义
+* 一个抽象的getter，返回集合的大小，还定义了一个抽象迭代器。
+* 然后它在这些基础上实现了具体的isEmpty()，toString()，
+* 和equals()方法。实现了迭代器，大小getter，和has()方法的子类得到了这些具体
+* 方法的免费实现。
+*/
+class AbstractEnumerableSet extends AbstractSet {
+  get size() { throw new Error("抽象方法"); }
+  [Symbol.iterator]() { throw new Error("抽象方法"); }
+
+  isEmpty() { return this.size === 0; }
+  toString() { return `{${Array.from(this).join(", ")}}`; }
+  equals(set) {
+    // 如果其他集合也不是Enumerable，那么它不等于这个集合
+    if (!(set instanceof AbstractEnumerableSet)) return false;
+
+    // 如果它们的大小不同，那么它们不相等
+    if (this.size !== set.size) return false;
+
+    // 循环遍历这个集合的元素
+    for (let element of this) {
+      // 如果一个元素不在其他集合中，它们不相等
+      if (!set.has(element)) return false;
+    }
+
+    // 元素匹配，所以集合是相等的
+    return true;
+  }
+}
+
+/*
+* SingletonSet是AbstractEnumerableSet的一个具体子类。
+* 单例集是一个只有一个成员的只读集。
+*/
+class SingletonSet extends AbstractEnumerableSet {
+  constructor(member) {
+    super();
+    this.member = member;
+  }
+
+  // 我们实现了这三个方法，然后继承了基于这些方法的isEmpty, equals()
+  // 和toString()的实现。
+  has(x) { return x === this.member; }
+  get size() { return 1; }
+  *[Symbol.iterator]() { yield this.member; }
+}
+
+/*
+* AbstractWritableSet是AbstractEnumerableSet的一个抽象子类。
+* 它定义了insert()和remove()的抽象方法，这两个方法分别插入和
+* 删除集合中的单个元素，然后在这两个方法的基础上实现了具体的
+* add(), subtract(),和 intersect()方法。注意我们的API在这里
+* 和标准的JavaScript Set类有所不同。
+*/
+class AbstractWritableSet extends AbstractEnumerableSet {
+  insert(x) { throw new Error("抽象方法"); }
+  remove(x) { throw new Error("抽象方法"); }
+
+  add(set) {
+    for (let element of set) {
+      this.insert(element);
+    }
+  }
+
+  subtract(set) {
+    for (let element of set) {
+      this.remove(element);
+    }
+  }
+
+  intersect(set) {
+    for (let element of this) {
+      if (!set.has(element)) {
+        this.remove(element);
+      }
+    }
+  }
+}
+
+/**
+* BitSet是AbstractWritableSet的一个具体子类，它的
+* 实现是一个非常高效的固定大小集合，用于存储
+* 元素是小于某个最大大小的非负整数的集合。
+*/
+class BitSet extends AbstractWritableSet {
+  constructor(max) {
+    super();
+    this.max = max;  // 我们可以存储的最大整数。
+    this.n = 0;      // 集合中有多少个整数
+    this.numBytes = Math.floor(max / 8) + 1;   // 我们需要多少字节
+    this.data = new Uint8Array(this.numBytes); // 字节数据
+  }
+
+  // 内部方法，检查一个值是否是这个集合的合法成员
+  _valid(x) { return Number.isInteger(x) && x >= 0 && x <= this.max; }
+
+  // 测试我们的数据数组的指定字节的指定位是否设置。返回true或false。
+  _has(byte, bit) { return (this.data[byte] & BitSet.bits[bit]) !== 0; }
+
+  // 值x是否在这个BitSet中？
+  has(x) {
+    if (this._valid(x)) {
+      let byte = Math.floor(x / 8);
+      let bit = x % 8;
+      return this._has(byte, bit);
+    } else {
+      return false;
+    }
+  }
+
+
+  // 将值x插入到BitSet中
+  insert(x) {
+    if (this._valid(x)) {               // 如果值x在合理的范围内
+      let byte = Math.floor(x / 8);   // 计算要设置的字节
+      let bit = x % 8;                // 以及该字节中要设置的位
+      if (!this._has(byte, bit)) {    // 如果该位没有设置
+        this.data[byte] |= BitSet.bits[bit];  // 则设置它
+        this.n++;                   // 并增加集合大小
+      }
+    } else {
+      throw new Error(`无效的集合元素: ${x}`);
+    }
+  }
+
+  // 将值x从BitSet中移除
+  remove(x) {
+    if (this._valid(x)) {               // 如果值x在合理的范围内
+      let byte = Math.floor(x / 8);   // 计算要设置的字节
+      let bit = x % 8;                // 以及该字节中要设置的位
+      if (this._has(byte, bit)) {     // 如果该位已设置
+        this.data[byte] &= BitSet.masks[bit];  // 则清除它
+        this.n--;                   // 并减少集合大小
+      }
+    } else {
+      throw new Error(`无效的集合元素: ${x}`);
+    }
+  }
+
+  // 返回这个集合的大小
+  get size() { return this.n; }
+
+  // 迭代器用于遍历集合成员
+  *[Symbol.iterator]() {
+    for (let byte = 0; byte < this.numBytes; byte++) {
+      for (let bit = 0; bit < 8; bit++) {
+        if (this._has(byte, bit)) {
+          yield byte * 8 + bit;
+        }
+      }
+    }
+  }
+}
+
+// BitSet的两个静态属性用于位操作
+BitSet.bits = new Uint8Array([1, 2, 4, 8, 16, 32, 64, 128]);
+BitSet.masks = new Uint8Array([~1, ~2, ~4, ~8, ~16, ~32, ~64, ~128]);
+```
+
