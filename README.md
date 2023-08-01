@@ -956,3 +956,183 @@ BitSet.bits = new Uint8Array([1, 2, 4, 8, 16, 32, 64, 128]);
 BitSet.masks = new Uint8Array([~1, ~2, ~4, ~8, ~16, ~32, ~64, ~128]);
 ```
 
+
+## 11 `JavaScript` 标准库
+### 11.2 Maps and Sets
+#### 11.1.3 WeakMap and WeakSet
+> WeakMap 类是 Map 类的变体（但不是真正的子类），它不会阻止其键值被垃圾回收。垃圾回收是 JavaScript 解释器回收不再“可访问”并且无法由程序使用的对象的内存的过程。常规 map 保留对其键值的“强”引用，即使对它们的所有其他引用都已消失，它们仍然可以通过映射访问。相比之下，WeakMap 保留对其键值的“弱”引用，以使它们无法通过 WeakMap 获得，并且它们在 map 中的存在也不会阻止对其内存的回收。
+> WeakMap() 构造函数类似 Map() 构造函数，但是有一些重要的不同：
+> + WeakMap 键必须是对象或数组；原始值不受垃圾回收的限制，不能用作键。
+> + WeakMap 仅实现 get()、set()、has() 和 delete() 方法。 特别是，WeakMap 是不可迭代的，并且未定义 keys()、values() 或 forEach()。如果 WeakMap 是可迭代的，则其键将是可访问的，这让它不会“弱”
+> + 同样，WeakMap 也不实现 size 属性，因为随着对象被垃圾回收，WeakMap 的大小可能随时更改。
+> + WeakMap 的预期用途是允许将值与对象相关联而不会引起内存泄漏。例如，假设正在编写一个带有对象实参的函数，并且需要对该对象执行一些耗时的计算。为了提高效率，希望将计算出的值进行缓存以备后用。如果使用 Map 对象实现缓存，则将防止回收任何对象，但是通过使用 WeakMap，可以避免此问题。（通常可以使用私有的 Symbol 属性将计算的值直接缓存在对象上，从而获得相似的结果。
+
+> WeakSet 实现了一组对象，这些对象不会阻止垃圾回收这些对象。 WeakSet() 构造函数的工作方式类似于 Set() 构造函数，但 WeakSet 对象与 Set 对象的区别与 WeakMap 对象与 Map 对象的区别相同：
+> + WeakSet 中的值必须是对象或数组；原始值不受垃圾回收的限制，不能用作值。
+> + WeakSet 仅实现 add()、has() 和 delete() 方法。 特别是，WeakSet 是不可迭代的，并且未定义 keys()、values() 或 forEach()。如果 WeakSet 是可迭代的，则其值将是可访问的，这让它不会“弱”.
+> + WeakSet 没有 size 属性。
+> + WeakSet 并不经常使用：其用例类似于 WeakMap 的用例。例如，如果要标记（或“烙印”）对象具有某些特殊属性或类型，则可以将其添加到 WeakSet 中。然后，在其他位置，当要检查该属性或类型时，可以测试该 WeakSet 中的成员身份。使用常规 Set 执行此操作将防止所有标记的对象被垃圾回收，但这在使用 WeakSet 时不必担心。
+### 11.2 类型化数组和二进制数据
+#### 11.2.1 类型化数组
+> JavaScript 没有定义 TypedArray 类。相反，有11种类型化数组，每种类型具有不同的元素类型和构造函数：
+```js
+// 有符号8位整数数组
+new Int8Array()
+
+// 无符号8位整数数组
+new Uint8Array()
+
+// 无符号8位整数数组（范围在0到255之间，超出范围的值将被截断）
+new Uint8ClampedArray()
+
+// 有符号16位短整数数组
+new Int16Array()
+
+// 无符号16位短整数数组
+new Uint16Array()
+
+// 有符号32位整数数组
+new Int32Array()
+
+// 无符号32位整数数组
+new Uint32Array()
+
+// ES2020引入的有符号64位BigInt数组
+new BigInt64Array()
+
+// ES2020引入的无符号64位BigInt数组
+new BigUint64Array()
+
+// 32位浮点数数组
+new Float32Array()
+
+// 64位浮点数数组（普通的JavaScript数值）
+new Float64Array()
+
+```
+#### 11.2.4 使用类型化数组
+> 测试类型化数组特定的性能
+```js
+/**
+ * 
+ * rss (Resident Set Size)：所有内存占用，包括所有 C++ 和 JavaScript 对象和代码的内存占用。
+ * heapTotal：当前已经申请到的堆空间。
+ * heapUsed：当前使用的堆空间。
+ * external：V8 引擎内部 C++ 对象占用的内存。
+ * arrayBuffers：所有 ArrayBuffer 和 SharedArrayBuffer 实例的内存使用量，包括所有的 Node.js Buffer 实例。
+ */
+
+function measurePerformance(fn) {
+  const startMem = process.memoryUsage();
+  const startTime = now();
+
+  fn();  // 运行回调函数
+
+  const endMem = process.memoryUsage();
+  const endTime = now();
+
+  const timeElapsed = endTime - startTime;
+  const memUsage = {};
+  for (let key in endMem) {
+    memUsage[key] = ((endMem[key] - startMem[key]) / 1024 / 1024).toFixed(2) + ' MB';
+  }
+
+  console.log(`Time elapsed: ${timeElapsed.toFixed(2)} ms`);
+  console.log('Memory usage: ', memUsage);
+
+}
+
+
+measurePerformance(() => {
+  (function (n) {
+    let a = new Uint8Array(n + 1);
+    let max = Math.floor(Math.sqrt(n));
+    let p = 2;
+    while (p <= max) {
+      for (let i = 2 * p; i <= n; i += p)
+        a[i] = 1;
+      while (a[++p]) /* empty */;
+    }
+    while (a[n]) n--;
+    return n;
+  })
+    (100000000)
+});
+measurePerformance(() => {
+  (function (n) {
+    let a = new Array(n + 1).fill(0);
+    let max = Math.floor(Math.sqrt(n));
+    let p = 2;
+    while (p <= max) {
+      for (let i = 2 * p; i <= n; i += p)
+        a[i] = 1;
+      while (a[++p]) /* empty */;
+    }
+    while (a[n]) n--;
+    return n;
+  })
+    (100000000)
+});
+// 输出：
+/**
+ * Time elapsed: 634.96 ms
+ * Memory usage:  {
+ *   rss: '95.69 MB',
+ *   heapTotal: '0.00 MB',
+ *   heapUsed: '0.00 MB',
+ *   external: '95.37 MB',
+ *   arrayBuffers: '95.37 MB'
+ * }
+ * Time elapsed: 22510.01 ms
+ * Memory usage:  {
+ *   rss: '754.75 MB',
+ *   heapTotal: '773.47 MB',
+ *   heapUsed: '771.35 MB',
+ *   external: '-95.37 MB',
+ *   arrayBuffers: '-95.37 MB'
+ * }
+ */
+```
+>  可以看到在内存和时间上，类型化数组所具有的性能都比普通数组要好太多。使用 Uint8Array() 而不是 Array() 可以使代码运行速度提高四倍以上，并且使用的内存减少八倍。
+### 11.4 Dates and Times
+#### 11.4.1 时间戳
+>+ **高分辨率时间戳**
+
+> Date.now() 返回的时间戳以毫秒为单位。对于计算机而言，毫秒实际上是一个相对较长的时间，有时您可能希望以更高的精度测量经过的时间。performance.now() 函数允许这样做：它也返回毫秒级的时间戳，但是返回值不是整数，因此它包含毫秒的分数。 performance.now() 返回的值不是像 Date.now() 那样的绝对时间戳。取而代之的是，它仅指示网页加载成功或 Node 进程开始以来已花费了多少时间。
+> performance 对象是较大的 Performance API 的一部分，该 API 不是由 ECMAScript 标准定义的，而是由 Web 浏览器和 Node 实现的。为了在 Node 中使用 performance 对象，必须使用以下命令导入它：
+```js
+
+import { performance } from "perf_hooks"
+
+```
+> performance 在node16后的版本是直接提供全局对象，而在web端的chrome浏览器中是直接提供全局对象。
+
+### 11.9 URL
+```js
+let url = new URL("https://example.com/search");
+url.search                            // => "": no query yet
+url.searchParams.append("q", "term"); // Add a search parameter
+url.search                            // => "?q=term"
+url.searchParams.set("q", "x");       // Change the value of this parameter
+url.search                            // => "?q=x"
+url.searchParams.get("q")             // => "x": query the parameter value
+url.searchParams.has("q")             // => true: there is a q parameter
+url.searchParams.has("p")             // => false: there is no p parameter
+url.searchParams.append("opts", "1"); // Add another search parameter
+url.search                            // => "?q=x&opts=1"
+url.searchParams.append("opts", "&"); // Add another value for same name
+url.search                            // => "?q=x&opts=1&opts=%26": note escape
+url.searchParams.get("opts")          // => "1": the first value
+url.searchParams.getAll("opts")       // => ["1", "&"]: all values
+url.searchParams.sort();              // Put params in alphabetical order
+url.search                            // => "?opts=1&opts=%26&q=x"
+url.searchParams.set("opts", "y");    // Change the opts param
+url.search                            // => "?opts=y&q=x"
+// searchParams is iterable
+[...url.searchParams]                 // => [["opts", "y"], ["q", "x"]]
+url.searchParams.delete("opts");      // Delete the opts param
+url.search                            // => "?q=x"
+url.href                              // => "https://example.com/search?q=x"
+url.toString()                        // => same as href
+
+```
