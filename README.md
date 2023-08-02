@@ -1136,3 +1136,179 @@ url.href                              // => "https://example.com/search?q=x"
 url.toString()                        // => same as href
 
 ```
+## 12 迭代器和生成器
+### 12.1 迭代器
+> 首先，可迭代的对象：可以迭代的是诸如 Array，Set 和 Map 之类的类型。其次，迭代器对象本身，它执行迭代。第三，一个迭代结果对象，该对象保存迭代的每个步骤的结果
+> 任何对象具有特殊迭代器方法，并且该方法返回迭代器对象，那么该对象为可迭代对象。迭代器对象具有 next() 方法，该方法返回迭代结果对象。迭代结果对象是具有名为 value 和 done 的属性的对象。要迭代一个可迭代的对象，首先要调用其迭代器方法以获取一个迭代器对象。然后，重复调用迭代器对象的 next() 方法，直到返回的值的 done 属性设置为 true。
+```js
+let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+let inerable = arr[Symbol.iterator]()
+for (let result = inerable.next(); !result.done; result = inerable.next()) {
+  console.log(result.value)
+}
+```
+> 为了使类可迭代，必须实现一个名称为 Symbol Symbol.iterator 的方法。该方法必须返回一个具有 next() 方法的迭代器对象。并且 next() 方法必须返回具有 value 属性和或或布尔型 done 属性的迭代结果对象。示例实现了一个可迭代的 Range 类，并演示了如何创建可迭代的、迭代器和迭代结果对象。
+```JS
+class Range {
+  constructor(from, to) {
+    this.from = from;
+    this.to = to;
+  }
+  has(x) { return typeof x === "number" && this.from <= x && x <= this.to; }
+  toString() { return `{ x | ${this.from} ≤ x ≤ ${this.to} }`; }
+  [Symbol.iterator]() {
+    let next = Math.ceil(this.from);  
+    let last = this.to;               
+    return {                          
+      next() {
+        return (next <= last) 
+          ? { value: next++ } 
+          : { done: true };   
+      },
+      [Symbol.iterator]() { return this; }
+    };
+  }
+}
+
+for (let x of new Range(1, 10)) console.log(x); // Logs numbers 1 to 10
+console.log([...new Range(-2, 2)])              // => [-2, -1, 0, 1, 2]
+```
+> 另一个有用的生成器函数，它交错多个可迭代对象的元素：
+```js
+function* oneDigitPrimes() { 
+  yield 2;                 
+  yield 3;                 
+  yield 5;                 
+  yield 7;                 
+}
+
+
+function* zip(...iterables) {
+  let iterators = iterables.map(i => i[Symbol.iterator]());
+  let index = 0;
+  while (iterators.length > 0) {         
+    if (index >= iterators.length) {     
+      index = 0;                         
+    }
+    let item = iterators[index].next();  
+    if (item.done) {                     
+      iterators.splice(index, 1);     
+    }
+    else {                            
+      yield item.value;               
+      index++;                        
+    }
+  }
+}
+
+[...zip(oneDigitPrimes(), [0], "ab")]    // => [2,,0"a",3,"b",5,7]
+```
+> 我们不使用生成器当然也是可以的
+```js
+
+function* oneDigitPrimes() {
+  yield 2;
+  yield 3;
+  yield 5;
+  yield 7;
+}
+function zipOther(...arr) {
+    let res = []
+    let max = 0
+    let arrX = arr.map(i => {
+        let arrI = [...i]
+        max = Math.max(max, arrI.length)
+        return arrI
+    });
+    for (let i = 0; i < max; i++) {
+        for (let j = 0; j < arrX.length; j++) {
+            if (arrX[j][i] !== undefined) {
+                res.push(arrX[j][i])
+            }
+        }
+    }
+    return res
+}
+
+zipOther(oneDigitPrimes(), [0], "ab") // => [2,,0"a",3,"b",5,7]
+```
+> 迭代一个可迭代的对象并产生每个结果值。
+```js
+function* oneDigitPrimes() {
+    yield 2;
+    yield 3;
+    yield 5;
+    yield 7;
+}
+function* sequence(...iterables) {
+    for(let iterable of iterables) {
+        yield* iterable;
+    }
+}
+
+[...sequence("abc",oneDigitPrimes())]  // => ["a","b","c",2,3,5,7]
+
+```
+### 12.4 生成器高级功能
+#### 12.4.1 生成器函数的返回值
+> 生成器函数的返回值是一个迭代器对象。如果生成器函数包含 return 语句，则该语句的值将成为迭代器对象的 value 属性的值，而 done 属性将设置为 true。如果生成器函数没有 return 语句，则迭代器对象的 value 属性将为 undefined，而 done 属性将设置为 true。如果生成器函数包含 return 语句，则该语句的值将成为迭代器对象的 value 属性的值，而 done 属性将设置为 true。如果生成器函数没有 return 语句，则迭代器对象的 value 属性将为 undefined，而 done 属性将设置为 true。
+```js
+function *oneAndDone() {
+    yield 1;
+    return "done";
+}
+[...oneAndDone()]   // => [1]
+let generator = oneAndDone();
+generator.next()           // => { value: 1, done: false}
+generator.next()           // => { value: "done", done: true }
+generator.next()           // => { value: undefined, done: true }
+
+function* oneAndDone() {
+    return "done";
+    yield 1;
+}
+
+// The return value does not appear in normal iteration.
+[...oneAndDone()]   // => [1]
+
+// But it is available if you explicitly call next()
+let generator = oneAndDone();
+generator.next()         // => { value: 'done', done: true }
+generator.next()         // => { value: undefined, done: true }
+```
+#### 12.4.2 yield表达式的值
+> 调用生成器的 next() 方法时，生成器函数将运行直至到达 yield 表达式。将评估 yield 关键字之后的表达式，该值将成为 next() 调用的返回值。此时，生成器函数在评估 yield 表达式的中间立即停止执行。下次调用生成器的 next() 方法时，传递给 next() 的参数成为已暂停的 yield 表达式的值。因此，生成器将把 yield 的值返回给它的调用者，然后调用者通过 next() 将值传递给生成器。生成器和调用者是两个独立的执行流，来回传递值（和控制）。以下代码说明：
+```js
+function* smallNumbers() {
+    console.log("next() invoked the first time; argument discarded");
+    let y1 = yield 1;    // y1 == "b"
+    console.log("next() invoked a second time with argument", y1);
+    let y2 = yield 2;    // y2 == "c"
+    console.log("next() invoked a third time with argument", y2);
+    let y3 = yield 3;    // y3 == "d"
+    console.log("next() invoked a fourth time with argument", y3);
+    return 4;
+}
+
+let g = smallNumbers();
+console.log("generator created; no code runs yet");
+let n1 = g.next("a");   // n1.value == 1
+console.log("generator yielded", n1.value);
+let n2 = g.next("b");   // n2.value == 2
+console.log("generator yielded", n2.value);
+let n3 = g.next("c");   // n3.value == 3
+console.log("generator yielded", n3.value);
+let n4 = g.next("d");   // n4 == { value: 4, done: true }
+console.log("generator returned", n4.value);
+
+// 输出
+// generator created; no code runs yet
+// next() invoked the first time; argument discarded
+// generator yielded 1
+// next() invoked a second time with argument b
+// generator yielded 2
+// next() invoked a third time with argument c
+// generator yielded 3
+// next() invoked a fourth time with argument d
+// generator returned 4
+```
