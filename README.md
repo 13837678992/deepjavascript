@@ -1312,3 +1312,144 @@ console.log("generator returned", n4.value);
 // next() invoked a fourth time with argument d
 // generator returned 4
 ```
+## 13 异步 JavaScript
+### 13.2 Promise
+#### 13.2.7 按顺序执行promise
+> 有时，您可能希望按顺序执行一系列 promise。例如，假设您有一个函数，该函数接受一个 URL 并返回一个 promise，该 promise 将解析为从该 URL 下载的文本。您可能希望编写一个函数，该函数接受一个 URL 数组并返回一个 promise，该 promise 将解析为一个数组，该数组包含从每个 URL 下载的文本。
+```js
+function fetchSequentially(urls) {
+  let babis = []
+  fetchOne = (url) => {
+    return fetch(url)
+      .then(res => res.json())
+      .then(data => {
+        babis.push(data)
+      })
+  }
+  let p = Promise.resolve(undefined)
+  urls.forEach(url => {
+    p = p.then(() => fetchOne(url))
+  })
+  return p.then(() => babis)
+}
+```
+
+### 13.4 异步迭代器
+#### 13.4.3 异步生成器
+> 使用异步生成器和 for/await 循环代替 setInterval() 回调函数以固定的间隔重复运行代码
+```js
+
+function elapsedTime(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+async function* clock(interval, max=Infinity) {
+    for(let count = 1; count <= max; count++) { 
+        await elapsedTime(interval);            
+        yield count;                            
+    }
+}
+async function test() {                       
+    for await (let tick of clock(300, 100)) { 
+        console.log(tick);
+    }
+}
+test()
+```
+#### 13.4.4 实现异步迭代器
+> 除了使用异步生成器来实现异步迭代器外，还可以通过使用 Symbol.asyncIterator() 方法定义一个对象来直接实现它们，而 Symbol.asyncIterator() 方法将返回一个对象，而 next() 方法将返回一个决议为迭代器结果对象的 Promise。在下面的代码中，我们重新实现了上一个示例中的 clock() 函数，因此它不是生成器，而仅是返回一个异步可迭代的对象。请注意，此示例中的 next() 方法未明确返回 Promise；相反，我们只声明 next() 是异步的：
+```js
+function clock(interval, max = Infinity) {
+  function until(time) {
+    return new Promise(resolve => setTimeout(resolve, time - Date.now()));
+  }
+  return {
+    startTime: Date.now(),  
+    count: 1,               
+    async next() {          
+      if (this.count > max) {   
+        return { done: true };  
+      }
+        
+      let targetTime = this.startTime + this.count * interval;
+      await until(targetTime);
+      return { value: this.count++ };
+    },
+    [Symbol.asyncIterator]() { return this; }
+  };
+}
+async function test() {
+  for await (let tick of clock(100, 1000)) {
+    console.log(tick);
+  }
+}
+test()
+```
+> AsyncQueue 之上实现了一个简单的异步迭代
+```js
+class AsyncQueue {
+    constructor() {
+        this.values = [];
+        this.resolvers = [];
+        this.closed = false;
+    }
+
+    enqueue(value) {
+        if (this.closed) {
+            throw new Error("AsyncQueue closed");
+        }
+        if (this.resolvers.length > 0) {
+            const resolve = this.resolvers.shift();
+            resolve(value);
+        }
+        else {
+            this.values.push(value);
+        }
+    }
+
+    dequeue() {
+        if (this.values.length > 0) {
+            const value = this.values.shift();
+            return Promise.resolve(value);
+        }
+        else if (this.closed) {
+            return Promise.resolve(AsyncQueue.EOS);
+        }
+        else {
+            return new Promise((resolve) => { this.resolvers.push(resolve); });
+        }
+    }
+
+    close() {
+        while(this.resolvers.length > 0) {
+            this.resolvers.shift()(AsyncQueue.EOS);
+        }
+        this.closed = true;
+    }
+    [Symbol.asyncIterator]() { return this; }
+    next() {
+        return this.dequeue().then(value => (value === AsyncQueue.EOS)
+            ? { value: undefined, done: true }
+            : { value: value, done: false });
+    }
+}
+AsyncQueue.EOS = Symbol("end-of-stream");
+let queue = new AsyncQueue();
+// 生产者
+async function producer() {
+    for (let i = 0; i < 10; i++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        queue.enqueue(i);
+    }
+    queue.close();
+}
+
+// 消费者
+async function consumer() {
+    for await (let value of queue) {
+        console.log(value);
+    }
+}
+
+producer();
+consumer();
+```
