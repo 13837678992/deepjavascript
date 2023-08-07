@@ -4,12 +4,12 @@
 > 前言：`node：18.8.0`、 `"performance-now": "^2.1.0"`
 ## 3 类型、值和变量
 ### 3.7 The Global Object
-> ES2020 最终定义了 `globalThis` 作为在任何上下文中引用全局对象的标准方式。到 2020 年初，所有现代浏览器和 Node 都实现了该特性。
+> ES2020 最终定义了 `globalThis` 作为在任何上下文中引用全局对象的标准方式。到 2020 年初，所有现代浏览器和 `Node` 都实现了该特性。
 ### 3.9 类型转换
 #### 3.9.3 对象到原始类型的转换
-> + prefer-string算法首先尝试toString()方法。如果该方法被定义并返回一个原语值，那么JavaScript将使用该原语值(即使它不是字符串!)如果toString()不存在或者它返回一个对象，那么JavaScript会尝试valueOf()方法。如果该方法存在并返回一个原始值，那么JavaScript将使用该值。否则，转换将失败，并出现TypeError。
-> + prefer-number算法的工作原理与prefer-string算法相似，不同之处是它首先尝试valueOf()，然后尝试toString()。
-> + 无优先级算法取决于被转换对象的类。如果对象是Date对象，那么JavaScript使用prefer-string算法。对于任何其他对象，JavaScript都使用prefer-number算法。
+> + `prefer-string`算法首先尝试`toString()`方法。如果该方法被定义并返回一个原语值，那么`JavaScript`将使用该原语值(即使它不是字符串!)如果`toString()`不存在或者它返回一个对象，那么`JavaScript`会尝试`valueOf()`方法。如果该方法存在并返回一个原始值，那么`JavaScript`将使用该值。否则，转换将失败，并出现`TypeError`。
+> + `prefer-number`算法的工作原理与`prefer-string`算法相似，不同之处是它首先尝试`valueOf()`，然后尝试`toString()`。
+> + 无优先级算法取决于被转换对象的类。如果对象是`Date`对象，那么`JavaScript`使用`prefer-string`算法。对于任何其他对象，`JavaScript`都使用`prefer-number`算法。
 ## 4 表达式和运算符
 ### 4.5 调用表达式
 #### 4.5.1 条件调用
@@ -42,7 +42,7 @@ undefinedPerson.greet?.(); // 调用不存在的函数
 ```
 ### 4.9 关系表达式
 #### 4.9.3 in 运算符
-> `in` 运算符需要一个左侧操作数，该操作数是字符串、符号或可以转换为字符串的值。它需要一个作为对象的右侧操作数。如果左侧值是右侧对象的属性名称，则其计算结果为 true。例如
+> `in` 运算符需要一个左侧操作数，该操作数是字符串、符号或可以转换为字符串的值。它需要一个作为对象的右侧操作数。如果左侧值是右侧对象的属性名称，则其计算结果为 `true`。例如
 ```js
     let point = {x: 1, y: 1};  // Define an object
     "x" in point               // => true: object has property named "x"
@@ -57,8 +57,8 @@ undefinedPerson.greet?.(); // 调用不存在的函数
 ```
 ## 5 语句
 ### 5.3 条件句
-#### 5.3.3 switch
-> 请注意，对于`switch`来说，case 关键字后面一般跟有数字或字符串。这是实践中最经常使用 switch 语句的方式，但是请注意，ECMAScript 标准允许每种情况后面都可以有一个任意表达式。
+#### 5.3.3 `switch`
+> 请注意，对于`switch`来说，`case` 关键字后面一般跟有数字或字符串。这是实践中最经常使用 `switch` 语句的方式，但是请注意，`ECMAScript` 标准允许每种情况后面都可以有一个任意表达式。
 ```js
 function convert(x) {
   switch (f1(x)) {
@@ -87,7 +87,7 @@ function caseF2(x) {
 console.log(convert(1))
 ```
 ### 5.4 循环
-+ for
++ `for`
 ```js
 // eq1:
 for (let i = 0; i < 10; i++) {
@@ -111,7 +111,7 @@ let a = [], i = 0;
 for(a[i++] in o) /* empty */;
 
 ```
-+ for/await
++ `for/await`
 > ES2018 引入了一种新型的迭代器，称为异步迭代器，以及 `for/of` 循环的一种变体，即与异步迭代器一起使用的 `for/await` 循环。
 ```js
 
@@ -131,7 +131,7 @@ async function fetchData(url) {
 
 #### 5.5.1 标记语句
 任何语句都可以在其前面加上标识符和冒号来标记。
-eg：标识符配合break和continue使用
+eg：标识符配合`break`和`continue`使用
 ```js
 outerLoop: // 这是一个语句标识符
     for (let i = 0; i < 5; i++) {
@@ -160,16 +160,16 @@ outerLoop: // 这是一个标识符
 ```
 ## 6 对象
 ### 6.5 测试属性
-+ in
-> in 运算符的左侧是属性名，右侧是对象。如果对象的自有属性或继承属性中包含这个属性则返回 true：
++ `in`
+> `in` 运算符的左侧是属性名，右侧是对象。如果对象的自有属性或继承属性中包含这个属性则返回 `true`：
 ```js
 let o = { x: 1 };
 "x" in o         // => true: o has an own property "x"
 "y" in o         // => false: o doesn't have a property "y"
 "toString" in o  // => true: o inherits a toString property
 ```
-+ hasOwnProperty()
-> 对象的 hasOwnProperty() 方法用来检测给定的名字是否是对象的自有属性。对于继承属性它将返回 false：
++ `hasOwnProperty()`
+> 对象的 `hasOwnProperty()` 方法用来检测给定的名字是否是对象的自有属性。对于继承属性它将返回 `false`：
 ```js
 let o = { x: 1 };
 o.hasOwnProperty("x")        // => true: o has an own property x
@@ -177,7 +177,7 @@ o.hasOwnProperty("y")        // => false: o doesn't have a property y
 o.hasOwnProperty("toString") // => false: toString is an inherited property
 
 ```
-+ propertyIsEnumerable()
++ `propertyIsEnumerable()`
 > 对象的 `propertyIsEnumerable()` 方法用来检测给定的属性是否能够使用 `for/in` 语句来枚举。对于继承属性以及不可枚举的自有属性它将返回 `false`,`propertyIsEnumerable()` 是 `hasOwnProperty()` 的增强版。只有检测到是自有属性且这个属性的可枚举性为 `true` 时它才返回 `true`。某些内置属性是不可枚举的。通常由 `JavaScript` 代码创建的属性都是可枚举的，除非在 ECMAScript 5 中通过 `defineProperty()` 设置它们的可枚举性为 `false`。
 ```js
 let o = { x: 1 };
@@ -187,11 +187,11 @@ Object.prototype.propertyIsEnumerable("toString") // => false: not enumerable
 ```
 ### 6.6 枚举属性
 #### 6.6.1属性枚举顺序
-> ES6 正式定义元素的自有属性的枚举顺序。`Object.keys()`、`Object.values()`、`Object.getOwnPropertyNames()`、`Object.getOwnPropertyNames()`、`Object.getOwnPropertySymbols()`、`Reflect.ownKeys()` 和相关方法如 `JSON.stringify()` 属性列表都按以下顺序排列的，受它们自身是否是不可枚举属性列表或者属性是字符串或者 Symbol 影响：
+> ES6 正式定义元素的自有属性的枚举顺序。`Object.keys()`、`Object.values()`、`Object.getOwnPropertyNames()`、`Object.getOwnPropertyNames()`、`Object.getOwnPropertySymbols()`、`Reflect.ownKeys()` 和相关方法如 `JSON.stringify()` 属性列表都按以下顺序排列的，受它们自身是否是不可枚举属性列表或者属性是字符串或者 `Symbol` 影响：
 
 > 1. 所有数字键按升序排序。
 > 2. 所有字符串键按照它们被加入对象的顺序排序。
-> 3. 所有 Symbol 键按照它们被加入对象的顺序排序。
+> 3. 所有 `Symbol` 键按照它们被加入对象的顺序排序。
 > 4. 所有剩余的自有属性按照它们被加入对象的顺序排序。
 > 5. 所有继承的属性按照它们被加入对象的顺序排序。
 ```js
@@ -325,20 +325,20 @@ console.log('Memory increase after assign: ', (afterAssignMemoryUsage.heapUsed -
 > 这里的测试都是给予`node 18.8.0`版本的，如果是其他版本，可能会有不同，在14.17.5版本测试发现对于深层拷贝对于内存的占用展开运算符是`Object.assign()` 方法的5倍以上。
 ## 7 数组
 ### 7.1 数组的创建
-+ Array 构造函数
++ `Array` 构造函数
 + 数组字面量
-+ Array.of() 静态方法
-+ Array.from() 静态方法
-+ 可迭代数组...运算符
-> 对于`Array.of`当 Array() 构造函数调用时有一个数值型实参，它会将实参作为数组的长度。但当调用时不止一个数值型实参时，它会将那些实参作为数组的元素创建。这意味着 Array() 构造函数不能创建只有一个数值型元素的数组。在 ES6 中，Array.of() 函数修复了这个问题：它是一个将其实参值（无论有多少个实参）作为数组元素创建并返回一个新数组的工厂方法：
++ `Array.of()` 静态方法
++ `Array.from()` 静态方法
++ 可迭代数组`...`运算符
+> 对于`Array.of`当 `Array()` 构造函数调用时有一个数值型实参，它会将实参作为数组的长度。但当调用时不止一个数值型实参时，它会将那些实参作为数组的元素创建。这意味着 `Array()` 构造函数不能创建只有一个数值型元素的数组。在 ES6 中，`Array.of()` 函数修复了这个问题：它是一个将其实参值（无论有多少个实参）作为数组元素创建并返回一个新数组的工厂方法：
 ```js
 Array.of()        // => []; returns empty array with no arguments
 Array.of(10)      // => [10]; can create arrays with a single numeric argument
 Array.of(1,2,3)   // => [1, 2, 3]
 ```
 
-#### 7.1.5 Array.from()
-> `Array.from()` 也很重要，因为它定义了一个将类数组对象拷贝成数组的方法。类数组对象是一个不是数组的对象，它有一个数值型的 length 属性，并且它的值碰巧保存在属性名为整数的属性中。当使用客户端 JavaScript 时，一些浏览器方法的返回值是类数组的，并且当将其转化成真正的数组后会更容易操作它们：
+#### 7.1.5 `Array.from()`
+> `Array.from()` 也很重要，因为它定义了一个将类数组对象拷贝成数组的方法。类数组对象是一个不是数组的对象，它有一个数值型的 `length` 属性，并且它的值碰巧保存在属性名为整数的属性中。当使用客户端 `JavaScript` 时，一些浏览器方法的返回值是类数组的，并且当将其转化成真正的数组后会更容易操作它们：
 ```js
 var arrayLike = { 0: 'a', 1: 'b', 2: 'c', length: 3 };
 var array = Array.from(arrayLike);
@@ -348,7 +348,7 @@ console.log(array); // ['a', 'b', 'c']
 ### 7.8 数组方法
 #### 7.8.6 Array Searching and Sorting Methods
 + `includes() findeIndex() some()`
-> `includes()` 方法用来判断一个数组是否包含一个指定的值，如果是返回 true，否则false。但是在实际的业务中，我们更关心的是数组中是否包含某个对象，而不是某个值。这时候我们可以使用 `Array.prototype.some()`或者`Array.prototype.findIndex()` 方法来实现：
+> `includes()` 方法用来判断一个数组是否包含一个指定的值，如果是返回 `true`，否则 `false`。但是在实际的业务中，我们更关心的是数组中是否包含某个对象，而不是某个值。这时候我们可以使用 `Array.prototype.some()`或者`Array.prototype.findIndex()` 方法来实现：
 
 ```js
 const performance = require('performance-now');
@@ -494,9 +494,9 @@ runPerformanceTest(() => testArrayFindIndex(largeArray, largeArray[99999].id), n
  */
 
 ```
-> 总结。对于特定的场景，Map的性能是最优的，但是对于简单的数据，Set的性能是最优的，但是对于复杂的数据，Array的性能是最优的。
+> 总结。对于特定的场景，`Map` 的性能是最优的，但是对于简单的数据，`Set` 的性能是最优的，但是对于复杂的数据，`Array` 的性能是最优的。
 #### 7.8.7 Array to String Conversions
-> Array 类定义了三个方法来将数组转化为字符串，`join() `,`toString()` 和 `toLocaleString()`。以及`JSON.stringify()`,它可以将任意 JavaScript 值转化为 JSON 字符串。这些方法的区别在于它们的参数和返回值。
+> Array 类定义了三个方法来将数组转化为字符串，`join() `,`toString()` 和 `toLocaleString()`。以及`JSON.stringify()`,它可以将任意 `JavaScript` 值转化为 `JSON` 字符串。这些方法的区别在于它们的参数和返回值。
 > 对比在项目中的深拷贝所带来的性能区别
 ```js
 const lodash = require('lodash');
@@ -555,13 +555,13 @@ console.log('Recursive deepCopy time:', (t1 - t0).toFixed(4), 'ms');
  * Recursive deepCopy time: 1254.2543 ms
  */
 ```
-> lodash 的 cloneDeep 方法会处理循环引用、函数、日期、正则表达式等特殊对象，这需要额外的检查和逻辑，可能导致性能下降。
-> 另一方面，JSON.stringify 和 JSON.parse 方法需要将对象转换为字符串，然后再将字符串转换回对象。这个过程涉及到序列化和反序列化，可能比直接复制对象的属性更耗时。
+> `lodash` 的 `cloneDeep` 方法会处理循环引用、函数、日期、正则表达式等特殊对象，这需要额外的检查和逻辑，可能导致性能下降。
+> 另一方面，`JSON.stringify` 和 `JSON.parse` 方法需要将对象转换为字符串，然后再将字符串转换回对象。这个过程涉及到序列化和反序列化，可能比直接复制对象的属性更耗时。
 > 递归的深拷贝方法在性能上表现最好，但是它不能处理循环引用，因此在实际的业务中，我们需要根据实际的需求来选择合适的方法。
 
 ### 7.9 Array-Like Objects
->  JavaScript 数组和常规的对象有明显的区别。但是定义数组的本质特性。一种常常完全合理的看法是把拥有一个数值型 length 属性和对应非负整数属性的对象看作数组的同类。
-> 实际上这些“类数组”对象在实践中偶尔出现，虽然不能通过它们直接调用数组方法或者期望 length 属性有什么特殊的行为，但是仍然可以用针对真正数组遍历代码来遍历它们。结论就是很多数组算法针对类数组对象同样奏效，就像针对真正的数组一样。尤其是这种情况，算法把数组看成只读的或者如果保持数组长度不变
+>  `JavaScript` 数组和常规的对象有明显的区别。但是定义数组的本质特性。一种常常完全合理的看法是把拥有一个数值型 `length` 属性和对应非负整数属性的对象看作数组的同类。
+> 实际上这些“类数组”对象在实践中偶尔出现，虽然不能通过它们直接调用数组方法或者期望 `length` 属性有什么特殊的行为，但是仍然可以用针对真正数组遍历代码来遍历它们。结论就是很多数组算法针对类数组对象同样奏效，就像针对真正的数组一样。尤其是这种情况，算法把数组看成只读的或者如果保持数组长度不变
 > 以下代码为一个常规对象增加了一些属性使其变成类数组对象，然后遍历生成的伪数组的“元素”：
 ```js
 let a = {};  // Start with a regular empty object
@@ -581,7 +581,7 @@ for(let j = 0; j < a.length; j++) {
 }
 console.log(total);  // => 285
 ```
-> 大多数 JavaScript 数组方法都特意定义为泛型，以便它们在应用于除数组之外的类数组可以正常工作。由于类数组对象不会从 Array.prototype 继承，因此不能直接在它们上调用数组方法。但是，可以使用 Function.call 方法间接调用它们：
+> 大多数 `JavaScript` 数组方法都特意定义为泛型，以便它们在应用于除数组之外的类数组可以正常工作。由于类数组对象不会从 `Array.prototype` 继承，因此不能直接在它们上调用数组方法。但是，可以使用 `Function.call` 方法间接调用它们：
 ```js
 let a = {"0": "a", "1": "b", "2": "c", length: 3}; // An array-like object
 Array.prototype.join.call(a, "+")                  // => "a+b+c"
@@ -594,7 +594,7 @@ Array.from(a)                      // => ["a","b","c"]: easier array copy
 ```js
 Array.prototype.join.call("JavaScript", " ")  // => "J a v a S c r i p t"
 ```
-> 请记住，字符串是不可变值，因此当字符串被视为数组时，它们是只读数组。数组方法 push()、sort()、reverse() 和 splice() 直接修改数组，它们不能处理字符串。但是，尝试使用数组方法修改字符串不会引发异常：它只是静默失败。
+> 请记住，字符串是不可变值，因此当字符串被视为数组时，它们是只读数组。数组方法 `push()`、`sort()`、`reverse()` 和 `splice()` 直接修改数组，它们不能处理字符串。但是，尝试使用数组方法修改字符串不会引发异常：它只是静默失败。
 
 ## 8 函数
 ### 8.6 闭包
@@ -737,9 +737,9 @@ class Buffer {
 }
 ```
 
-> 字段初始化代码已移出构造函数，现在直接显示在类正文中。（当然，该代码仍作为构造函数的一部分运行。如果不定义构造函数，则字段初始化为隐式创建的构造函数的一部分。赋值左侧的 this. 前缀消失，但请注意即使是在初始化赋值的右侧，仍必须使用 this. 前缀引用这些字段。这种方式初始化实例字段的优点是，此语法允许（但不需要）将初始化放在类定义的顶部，使读者清楚地了解字段在每个实例将保存的状态。可以通过字段名后面跟一个分号来只声明不初始化一个字段。如果这样做，字段的初始值将是 undefined。显式设定初始化字段的值是比较好的风格。
+> 字段初始化代码已移出构造函数，现在直接显示在类正文中。（当然，该代码仍作为构造函数的一部分运行。如果不定义构造函数，则字段初始化为隐式创建的构造函数的一部分。赋值左侧的 `this.` 前缀消失，但请注意即使是在初始化赋值的右侧，仍必须使用 `this.` 前缀引用这些字段。这种方式初始化实例字段的优点是，此语法允许（但不需要）将初始化放在类定义的顶部，使读者清楚地了解字段在每个实例将保存的状态。可以通过字段名后面跟一个分号来只声明不初始化一个字段。如果这样做，字段的初始值将是 `undefined`。显式设定初始化字段的值是比较好的风格。
 
-> 标准化中的实例字段同时也定义了私有实例字段。如果使用上例中所示的实例字段初始化语法来定义其名称以 # 开头的字段（在 JavaScript 标识符中通常不是合法字符），则该字段在类正文中可用（使用 # 前缀），但对类正文之外的任何代码不可见且不可访问（因此不可变）。如果对于前面的 Buffer 类，要确保类的用户不会无意中修改实例的 size 字段，可以改为使用私有 #size 字段，然后定义 getter 函数以提供对值的只读访问：
+> 标准化中的实例字段同时也定义了私有实例字段。如果使用上例中所示的实例字段初始化语法来定义其名称以 # 开头的字段（在 `JavaScript` 标识符中通常不是合法字符），则该字段在类正文中可用（使用 # 前缀），但对类正文之外的任何代码不可见且不可访问（因此不可变）。如果对于前面的 `Buffer` 类，要确保类的用户不会无意中修改实例的 `size` 字段，可以改为使用私有 `#size` 字段，然后定义 `getter` 函数以提供对值的只读访问：
 ```js
 class Buffer {
     #size = 0; // 更加推荐 static ,并且只能在class正文里面定义 ，下面的定义就是错误的
@@ -752,7 +752,7 @@ class Buffer {
     }
 }
 ```
-> 示例：Sets.js：抽象类和实体类的层次
+> 示例：`Sets.js`：抽象类和实体类的层次
 ```js
 /**
  * AbstractSet类定义了一个抽象方法has()。
@@ -960,21 +960,21 @@ BitSet.masks = new Uint8Array([~1, ~2, ~4, ~8, ~16, ~32, ~64, ~128]);
 ## 11 `JavaScript` 标准库
 ### 11.2 Maps and Sets
 #### 11.1.3 WeakMap and WeakSet
-> WeakMap 类是 Map 类的变体（但不是真正的子类），它不会阻止其键值被垃圾回收。垃圾回收是 JavaScript 解释器回收不再“可访问”并且无法由程序使用的对象的内存的过程。常规 map 保留对其键值的“强”引用，即使对它们的所有其他引用都已消失，它们仍然可以通过映射访问。相比之下，WeakMap 保留对其键值的“弱”引用，以使它们无法通过 WeakMap 获得，并且它们在 map 中的存在也不会阻止对其内存的回收。
-> WeakMap() 构造函数类似 Map() 构造函数，但是有一些重要的不同：
-> + WeakMap 键必须是对象或数组；原始值不受垃圾回收的限制，不能用作键。
-> + WeakMap 仅实现 get()、set()、has() 和 delete() 方法。 特别是，WeakMap 是不可迭代的，并且未定义 keys()、values() 或 forEach()。如果 WeakMap 是可迭代的，则其键将是可访问的，这让它不会“弱”
-> + 同样，WeakMap 也不实现 size 属性，因为随着对象被垃圾回收，WeakMap 的大小可能随时更改。
-> + WeakMap 的预期用途是允许将值与对象相关联而不会引起内存泄漏。例如，假设正在编写一个带有对象实参的函数，并且需要对该对象执行一些耗时的计算。为了提高效率，希望将计算出的值进行缓存以备后用。如果使用 Map 对象实现缓存，则将防止回收任何对象，但是通过使用 WeakMap，可以避免此问题。（通常可以使用私有的 Symbol 属性将计算的值直接缓存在对象上，从而获得相似的结果。
+> `WeakMap` 类是 `Map` 类的变体（但不是真正的子类），它不会阻止其键值被垃圾回收。垃圾回收是 `JavaScript` 解释器回收不再“可访问”并且无法由程序使用的对象的内存的过程。常规 `map` 保留对其键值的“强”引用，即使对它们的所有其他引用都已消失，它们仍然可以通过映射访问。相比之下，`WeakMap` 保留对其键值的“弱”引用，以使它们无法通过 `WeakMap` 获得，并且它们在 `map` 中的存在也不会阻止对其内存的回收。
+> `WeakMap()` 构造函数类似 `Map()` 构造函数，但是有一些重要的不同：
+> + `WeakMap` 键必须是对象或数组；原始值不受垃圾回收的限制，不能用作键。
+> + `WeakMap` 仅实现 `get()`、`set()`、`has()` 和 `delete()` 方法。 特别是，`WeakMap` 是不可迭代的，并且未定义 `keys()`、`values()` 或 `forEach()`。如果 `WeakMap` 是可迭代的，则其键将是可访问的，这让它不会“弱”
+> + 同样，`WeakMap` 也不实现 `size` 属性，因为随着对象被垃圾回收，`WeakMap` 的大小可能随时更改。
+> + `WeakMap` 的预期用途是允许将值与对象相关联而不会引起内存泄漏。例如，假设正在编写一个带有对象实参的函数，并且需要对该对象执行一些耗时的计算。为了提高效率，希望将计算出的值进行缓存以备后用。如果使用 `Map` 对象实现缓存，则将防止回收任何对象，但是通过使用 `WeakMap`，可以避免此问题。（通常可以使用私有的 `Symbol` 属性将计算的值直接缓存在对象上，从而获得相似的结果。
 
-> WeakSet 实现了一组对象，这些对象不会阻止垃圾回收这些对象。 WeakSet() 构造函数的工作方式类似于 Set() 构造函数，但 WeakSet 对象与 Set 对象的区别与 WeakMap 对象与 Map 对象的区别相同：
-> + WeakSet 中的值必须是对象或数组；原始值不受垃圾回收的限制，不能用作值。
-> + WeakSet 仅实现 add()、has() 和 delete() 方法。 特别是，WeakSet 是不可迭代的，并且未定义 keys()、values() 或 forEach()。如果 WeakSet 是可迭代的，则其值将是可访问的，这让它不会“弱”.
-> + WeakSet 没有 size 属性。
-> + WeakSet 并不经常使用：其用例类似于 WeakMap 的用例。例如，如果要标记（或“烙印”）对象具有某些特殊属性或类型，则可以将其添加到 WeakSet 中。然后，在其他位置，当要检查该属性或类型时，可以测试该 WeakSet 中的成员身份。使用常规 Set 执行此操作将防止所有标记的对象被垃圾回收，但这在使用 WeakSet 时不必担心。
+> `WeakSet` 实现了一组对象，这些对象不会阻止垃圾回收这些对象。 `WeakSet()` 构造函数的工作方式类似于 `Set()` 构造函数，但 `WeakSet` 对象与 `Set` 对象的区别与 `WeakMap` 对象与 `Map` 对象的区别相同：
+> + `WeakSet` 中的值必须是对象或数组；原始值不受垃圾回收的限制，不能用作值。
+> + `WeakSet` 仅实现 `add()`、`has()` 和 `delete()` 方法。 特别是，`WeakSet` 是不可迭代的，并且未定义 `keys()`、`values()` 或 `forEach()`。如果 `WeakSet` 是可迭代的，则其值将是可访问的，这让它不会“弱”.
+> + `WeakSet` 没有 `size` 属性。
+> + `WeakSet` 并不经常使用：其用例类似于 `WeakMap` 的用例。例如，如果要标记（或“烙印”）对象具有某些特殊属性或类型，则可以将其添加到 `WeakSet` 中。然后，在其他位置，当要检查该属性或类型时，可以测试该 `WeakSet` 中的成员身份。使用常规 `Set` 执行此操作将防止所有标记的对象被垃圾回收，但这在使用 `WeakSet` 时不必担心。
 ### 11.2 类型化数组和二进制数据
 #### 11.2.1 类型化数组
-> JavaScript 没有定义 TypedArray 类。相反，有11种类型化数组，每种类型具有不同的元素类型和构造函数：
+> `JavaScript` 没有定义 `TypedArray` 类。相反，有11种类型化数组，每种类型具有不同的元素类型和构造函数：
 ```js
 // 有符号8位整数数组
 new Int8Array()
@@ -1093,19 +1093,19 @@ measurePerformance(() => {
  * }
  */
 ```
->  可以看到在内存和时间上，类型化数组所具有的性能都比普通数组要好太多。使用 Uint8Array() 而不是 Array() 可以使代码运行速度提高四倍以上，并且使用的内存减少八倍。
+>  可以看到在内存和时间上，类型化数组所具有的性能都比普通数组要好太多。使用 `Uint8Array()` 而不是 `Array()` 可以使代码运行速度提高四倍以上，并且使用的内存减少八倍。
 ### 11.4 Dates and Times
 #### 11.4.1 时间戳
 >+ **高分辨率时间戳**
 
-> Date.now() 返回的时间戳以毫秒为单位。对于计算机而言，毫秒实际上是一个相对较长的时间，有时您可能希望以更高的精度测量经过的时间。performance.now() 函数允许这样做：它也返回毫秒级的时间戳，但是返回值不是整数，因此它包含毫秒的分数。 performance.now() 返回的值不是像 Date.now() 那样的绝对时间戳。取而代之的是，它仅指示网页加载成功或 Node 进程开始以来已花费了多少时间。
-> performance 对象是较大的 Performance API 的一部分，该 API 不是由 ECMAScript 标准定义的，而是由 Web 浏览器和 Node 实现的。为了在 Node 中使用 performance 对象，必须使用以下命令导入它：
+> `Date.now()` 返回的时间戳以毫秒为单位。对于计算机而言，毫秒实际上是一个相对较长的时间，有时您可能希望以更高的精度测量经过的时间。`performance.now()` 函数允许这样做：它也返回毫秒级的时间戳，但是返回值不是整数，因此它包含毫秒的分数。 `performance.now()` 返回的值不是像 `Date.now()`那样的绝对时间戳。取而代之的是，它仅指示网页加载成功或 `Node` 进程开始以来已花费了多少时间。
+> `performance` 对象是较大的 `Performance API `的一部分，该 `API` 不是由 `ECMAScript` 标准定义的，而是由 `Web` 浏览器和 `Node` 实现的。为了在 `Node` 中使用 `performance` 对象，必须使用以下命令导入它：
 ```js
 
 import { performance } from "perf_hooks"
 
 ```
-> performance 在node16后的版本是直接提供全局对象，而在web端的chrome浏览器中是直接提供全局对象。
+> `performance` 在 `node16` 后的版本是直接提供全局对象，而在`web`端的`chrome`浏览器中是直接提供全局对象。
 
 ### 11.9 URL
 ```js
@@ -1134,12 +1134,11 @@ url.searchParams.delete("opts");      // Delete the opts param
 url.search                            // => "?q=x"
 url.href                              // => "https://example.com/search?q=x"
 url.toString()                        // => same as href
-
 ```
 ## 12 迭代器和生成器
 ### 12.1 迭代器
-> 首先，可迭代的对象：可以迭代的是诸如 Array，Set 和 Map 之类的类型。其次，迭代器对象本身，它执行迭代。第三，一个迭代结果对象，该对象保存迭代的每个步骤的结果
-> 任何对象具有特殊迭代器方法，并且该方法返回迭代器对象，那么该对象为可迭代对象。迭代器对象具有 next() 方法，该方法返回迭代结果对象。迭代结果对象是具有名为 value 和 done 的属性的对象。要迭代一个可迭代的对象，首先要调用其迭代器方法以获取一个迭代器对象。然后，重复调用迭代器对象的 next() 方法，直到返回的值的 done 属性设置为 true。
+> 首先，可迭代的对象：可以迭代的是诸如 `Array`，`Set` 和 `Map` 之类的类型。其次，迭代器对象本身，它执行迭代。第三，一个迭代结果对象，该对象保存迭代的每个步骤的结果
+> 任何对象具有特殊迭代器方法，并且该方法返回迭代器对象，那么该对象为可迭代对象。迭代器对象具有 `next()`方法，该方法返回迭代结果对象。迭代结果对象是具有名为 `value` 和 `done` 的属性的对象。要迭代一个可迭代的对象，首先要调用其迭代器方法以获取一个迭代器对象。然后，重复调用迭代器对象的 `next()` 方法，直到返回的值的 `done` 属性设置为 `true`。
 ```js
 let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 let inerable = arr[Symbol.iterator]()
@@ -1147,7 +1146,7 @@ for (let result = inerable.next(); !result.done; result = inerable.next()) {
   console.log(result.value)
 }
 ```
-> 为了使类可迭代，必须实现一个名称为 Symbol Symbol.iterator 的方法。该方法必须返回一个具有 next() 方法的迭代器对象。并且 next() 方法必须返回具有 value 属性和或或布尔型 done 属性的迭代结果对象。示例实现了一个可迭代的 Range 类，并演示了如何创建可迭代的、迭代器和迭代结果对象。
+> 为了使类可迭代，必须实现一个名称为 `Symbol.iterator` 的方法。该方法必须返回一个具有 `next()` 方法的迭代器对象。并且 `next()` 方法必须返回具有 `value` 属性和或或布尔型 `done` 属性的迭代结果对象。示例实现了一个可迭代的 `Range` 类，并演示了如何创建可迭代的、迭代器和迭代结果对象。
 ```JS
 class Range {
   constructor(from, to) {
@@ -1251,7 +1250,7 @@ function* sequence(...iterables) {
 ```
 ### 12.4 生成器高级功能
 #### 12.4.1 生成器函数的返回值
-> 生成器函数的返回值是一个迭代器对象。如果生成器函数包含 return 语句，则该语句的值将成为迭代器对象的 value 属性的值，而 done 属性将设置为 true。如果生成器函数没有 return 语句，则迭代器对象的 value 属性将为 undefined，而 done 属性将设置为 true。如果生成器函数包含 return 语句，则该语句的值将成为迭代器对象的 value 属性的值，而 done 属性将设置为 true。如果生成器函数没有 return 语句，则迭代器对象的 value 属性将为 undefined，而 done 属性将设置为 true。
+> 生成器函数的返回值是一个迭代器对象。如果生成器函数包含 `return` 语句，则该语句的值将成为迭代器对象的 `value` 属性的值，而 `done` 属性将设置为 `true`。如果生成器函数没有 `return` 语句，则迭代器对象的 `value` 属性将为 `undefined`，而 `done` 属性将设置为 `true`。如果生成器函数包含 `return` 语句，则该语句的值将成为迭代器对象的 `value` 属性的值，而 `done` 属性将设置为 `true`。如果生成器函数没有 `return` 语句，则迭代器对象的 `value` 属性将为 `undefined`，而 `done` 属性将设置为 `true`。
 ```js
 function *oneAndDone() {
     yield 1;
@@ -1276,8 +1275,8 @@ let generator = oneAndDone();
 generator.next()         // => { value: 'done', done: true }
 generator.next()         // => { value: undefined, done: true }
 ```
-#### 12.4.2 yield表达式的值
-> 调用生成器的 next() 方法时，生成器函数将运行直至到达 yield 表达式。将评估 yield 关键字之后的表达式，该值将成为 next() 调用的返回值。此时，生成器函数在评估 yield 表达式的中间立即停止执行。下次调用生成器的 next() 方法时，传递给 next() 的参数成为已暂停的 yield 表达式的值。因此，生成器将把 yield 的值返回给它的调用者，然后调用者通过 next() 将值传递给生成器。生成器和调用者是两个独立的执行流，来回传递值（和控制）。以下代码说明：
+#### 12.4.2 `yield` 表达式的值
+> 调用生成器的 `next()` 方法时，生成器函数将运行直至到达 `yield` 表达式。将评估 `yield` 关键字之后的表达式，该值将成为 `next()` 调用的返回值。此时，生成器函数在评估 `yield` 表达式的中间立即停止执行。下次调用生成器的 `next()` 方法时，传递给 `next()` 的参数成为已暂停的 `yield` 表达式的值。因此，生成器将把 `yield` 的值返回给它的调用者，然后调用者通过 `next()` 将值传递给生成器。生成器和调用者是两个独立的执行流，来回传递值（和控制）。以下代码说明：
 ```js
 function* smallNumbers() {
     console.log("next() invoked the first time; argument discarded");
@@ -1312,10 +1311,10 @@ console.log("generator returned", n4.value);
 // next() invoked a fourth time with argument d
 // generator returned 4
 ```
-## 13 异步 JavaScript
-### 13.2 Promise
-#### 13.2.7 按顺序执行promise
-> 有时，您可能希望按顺序执行一系列 promise。例如，假设您有一个函数，该函数接受一个 URL 并返回一个 promise，该 promise 将解析为从该 URL 下载的文本。您可能希望编写一个函数，该函数接受一个 URL 数组并返回一个 promise，该 promise 将解析为一个数组，该数组包含从每个 URL 下载的文本。
+## 13 异步 `JavaScript`
+### 13.2 `Promise`
+#### 13.2.7 按顺序执行 `promise`
+> 有时，您可能希望按顺序执行一系列 `promise`。例如，假设您有一个函数，该函数接受一个 `URL` 并返回一个 `promise`，该 `promise` 将解析为从该 `URL` 下载的文本。您可能希望编写一个函数，该函数接受一个 `URL` 数组并返回一个 `promise`，该 `promise` 将解析为一个数组，该数组包含从每个 `URL` 下载的文本。
 ```js
 function fetchSequentially(urls) {
   let babis = []
@@ -1336,7 +1335,7 @@ function fetchSequentially(urls) {
 
 ### 13.4 异步迭代器
 #### 13.4.3 异步生成器
-> 使用异步生成器和 for/await 循环代替 setInterval() 回调函数以固定的间隔重复运行代码
+> 使用异步生成器和 `for/await` 循环代替 `setInterval()` 回调函数以固定的间隔重复运行代码
 ```js
 
 function elapsedTime(ms) {
@@ -1356,7 +1355,7 @@ async function test() {
 test()
 ```
 #### 13.4.4 实现异步迭代器
-> 除了使用异步生成器来实现异步迭代器外，还可以通过使用 Symbol.asyncIterator() 方法定义一个对象来直接实现它们，而 Symbol.asyncIterator() 方法将返回一个对象，而 next() 方法将返回一个决议为迭代器结果对象的 Promise。在下面的代码中，我们重新实现了上一个示例中的 clock() 函数，因此它不是生成器，而仅是返回一个异步可迭代的对象。请注意，此示例中的 next() 方法未明确返回 Promise；相反，我们只声明 next() 是异步的：
+> 除了使用异步生成器来实现异步迭代器外，还可以通过使用 `Symbol.asyncIterator()` 方法定义一个对象来直接实现它们，而 `Symbol.asyncIterator()` 方法将返回一个对象，而 `next()` 方法将返回一个决议为迭代器结果对象的 `Promise`。在下面的代码中，我们重新实现了上一个示例中的 `clock()` 函数，因此它不是生成器，而仅是返回一个异步可迭代的对象。请注意，此示例中的 `next()` 方法未明确返回 `Promise`；相反，我们只声明 `next()` 是异步的：
 ```js
 function clock(interval, max = Infinity) {
   function until(time) {
@@ -1384,7 +1383,7 @@ async function test() {
 }
 test()
 ```
-> AsyncQueue 之上实现了一个简单的异步迭代
+> `AsyncQueue` 之上实现了一个简单的异步迭代
 ```js
 class AsyncQueue {
     constructor() {
@@ -1453,3 +1452,64 @@ async function consumer() {
 producer();
 consumer();
 ```
+## 14 元编程
+### 14.4 常见的 `Symbols`
+#### 14.4.1 Symbol.iterator and Symbol.asyncIterator
+> 迭代器和异步迭代器的标准符号
+#### 14.4.2 `Symbol.hasInstance`
+> 在 ES6 中，如果 `instanceof` 的右侧是任何具有 `[Symbol.hasInstance] `方法的对象，则以左侧值作为参数来调用该方法，并且该方法的返回值（转换为布尔值）将成为 `instanceof` 运算符的值。当然，如果右侧的值没有 `[Symbol.hasInstance]` 方法，而是一个函数，则 `instanceof` 运算符将按照其普通方式运行。
+```js
+// Define an object as a "type" we can use with instanceof
+let uint8 = {
+    [Symbol.hasInstance](x) {
+        return Number.isInteger(x) && x >= 0 && x <= 255;
+    }
+};
+128 instanceof uint8     // => true
+256 instanceof uint8     // => false: too big
+Math.PI instanceof uint8 // => false: not an integer
+
+```
+#### 14.4.3 `Symbol.toStringTag`
+> 在 ES6 之前，`Object.prototype.toString()` 方法的这种特殊行为仅适用于内置类型的实例，如果您在自己定义的类的实例上调用此 `Object.prototype.toString()`，它会只需返回“对象”。然而，在 ES6 中，`Object.prototype.toString()` 在其参数上查找符号名称为 `Symbol.toStringTag` 的属性，如果存在这样的属性，它将在其输出中使用该属性值。这意味着，如果您定义自己的类，则可以轻松地使用`Object.prototype.toString()`  
+```js
+class Range {
+    get [Symbol.toStringTag]() { return "Range"; }
+}
+let r = new Range(1, 10);
+Object.prototype.toString.call(r)   // => "[object Range]"
+```
+#### 14.4.4 `Symbol.species`
+> 在 ES6 之前，`JavaScript` 没有提供任何真正的方法来创建内置类（如 Array）的健壮子类。然而，在 `ES6` 中，您只需使用 `class` 和 `extends` 关键字即可扩展任何内置类。 
+```js
+class EZArray extends Array {
+    get first() { return this[0]; }
+    get last() { return this[this.length-1]; }
+}
+
+let e = new EZArray(1,2,3);
+let f = e.map(x => x * x);
+e.last  // => 3: the last element of EZArray e
+f.last  // => 9: f is also an EZArray with a last property
+```
+> 在 ES6 及更高版本中，`Array()` 构造函数有一个符号名称为 `Symbol.species` 的属性。 （请注意，此 `Symbol` 用作构造函数的属性名称。这里描述的大多数其他众所周知的 `Symbol` 都用作原型对象的方法名称。）当我们使用扩展创建子类时，生成的子类构造函数会继承超类构造函数的属性。 （这是对普通继承的补充，其中子类的实例继承超类的方法。）这意味着 `Array` 的每个子类的构造函数也有一个名为 `Symbol.species` 的继承属性。 （或者，如果需要，子类可以使用此名称定义自己的属性。）在 ES6 及更高版本中，对创建和返回新数组的 `map()` 和 `slice()` 等方法进行了稍微调整。他们（实际上）调用新的 `this.constructor` `Symbol.species` 来创建新数组，而不是仅仅创建常规数组。
+```js
+// Instead we can use defineProperty():
+Object.defineProperty(EZArray, Symbol.species, {value: Array});
+class EZArray extends Array {
+    static get [Symbol.species]() { return Array; }
+    get first() { return this[0]; }
+    get last() { return this[this.length-1]; }
+}
+let e = new EZArray(1,2,3);
+let f = e.map(x => x - 1);
+e.last  // => 3
+f.last  // => undefined: f is a regular array with no last getter
+```
+#### 14.4.7 `Symbol.toPrimitive`
+> [上文对象到原始类型的转换](#393-对象到原始类型的转换)解释了 `JavaScript` 具有三种略有不同的算法来将对象转换为原始值。宽松地说，对于需要或首选字符串值的转换，`JavaScript` 首先调用对象的 `toString()` 方法，如果 `toString()` 未定义或不返回原始值，则退回到 `valueOf()` 方法。对于首选数值的转换，`JavaScript` 首先尝试 `valueOf()` 方法，如果未定义 `valueOf()` 或它不返回原始值，则回退到 `toString()` 方法。最后，在没有偏好的情况下，它让类决定如何进行转换。日期对象首先使用 `toString()` 进行转换，所有其他类型首先尝试 `valueOf()`。
+
+> 在 ES6 中，Symbol.toPrimitive 允许您覆盖此默认的对象到基元行为，并让您完全控制自己的类的实例如何转换为基元值。为此，请使用此符号名称定义一个方法。该方法必须返回一个以某种方式表示该对象的原始值。您定义的方法将使用单个字符串参数来调用，该参数告诉您 `JavaScript` 尝试对您的对象执行哪种类型的转换：
+> + 如果参数是“string”，则意味着 `JavaScript` 正在期望或更喜欢（但不要求）字符串的上下文中进行转换。例如，当您将对象插入模板文字时，就会发生这种情况。
+> + 如果参数是“number”，则意味着 `JavaScript` 正在期望或更喜欢（但不要求）数字值的上下文中进行转换。当您将对象与 < 或 > 运算符或算术运算符（例如 - 和 *）一起使用时，就会发生这种情况。
+> + 如果参数是“default”，则意味着 `JavaScript` 正在数字或字符串值可以工作的上下文中转换您的对象。使用 +、== 和 != 运算符时会发生这种情况。
