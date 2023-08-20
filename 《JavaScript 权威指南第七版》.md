@@ -1,6 +1,7 @@
 # 《JavaScript 权威指南第七版》
-## [在线阅读](https://js.okten.cn/posts/)
+## [在线阅读权威指南第七版](https://js.okten.cn/posts/)
 ## [github项目](https://github.com/ten-ltw/JavaScript-The-Definitive-Guide-7th-zh)
+## [笔记所在github地址](https://github.com/13837678992/deepjavascript/blob/main/%E3%80%8AJavaScript%20%E6%9D%83%E5%A8%81%E6%8C%87%E5%8D%97%E7%AC%AC%E4%B8%83%E7%89%88%E3%80%8B.md)
 > 前言：`node：18.8.0`、 `"performance-now": "^2.1.0"`
 ## 3 类型、值和变量
 ### 3.7 The Global Object
@@ -560,7 +561,7 @@ console.log('Recursive deepCopy time:', (t1 - t0).toFixed(4), 'ms');
 > 递归的深拷贝方法在性能上表现最好，但是它不能处理循环引用，因此在实际的业务中，我们需要根据实际的需求来选择合适的方法。
 
 ### 7.9 Array-Like Objects
->  `JavaScript` 数组和常规的对象有明显的区别。但是定义数组的本质特性。一种常常完全合理的看法是把拥有一个数值型 `length` 属性和对应非负整数属性的对象看作数组的同类。
+>  `JavaScript` 数组和常规的对象有明显的区别。但是没有定义数组的本质特性。一种常常完全合理的看法是把拥有一个数值型 `length` 属性和对应非负整数属性的对象看作数组的同类。
 > 实际上这些“类数组”对象在实践中偶尔出现，虽然不能通过它们直接调用数组方法或者期望 `length` 属性有什么特殊的行为，但是仍然可以用针对真正数组遍历代码来遍历它们。结论就是很多数组算法针对类数组对象同样奏效，就像针对真正的数组一样。尤其是这种情况，算法把数组看成只读的或者如果保持数组长度不变
 > 以下代码为一个常规对象增加了一些属性使其变成类数组对象，然后遍历生成的伪数组的“元素”：
 ```js
@@ -1513,3 +1514,1276 @@ f.last  // => undefined: f is a regular array with no last getter
 > + 如果参数是“string”，则意味着 `JavaScript` 正在期望或更喜欢（但不要求）字符串的上下文中进行转换。例如，当您将对象插入模板文字时，就会发生这种情况。
 > + 如果参数是“number”，则意味着 `JavaScript` 正在期望或更喜欢（但不要求）数字值的上下文中进行转换。当您将对象与 < 或 > 运算符或算术运算符（例如 - 和 *）一起使用时，就会发生这种情况。
 > + 如果参数是“default”，则意味着 `JavaScript` 正在数字或字符串值可以工作的上下文中转换您的对象。使用 +、== 和 != 运算符时会发生这种情况。
+## 15 Web 浏览器中的 `JavaScript`
+### 15.1 网络编程基础知识
+#### 15.1.5 `JavaScript` 程序的执行
+> 您可以将 JavaScript 程序的执行视为分两个阶段进行。在第一阶段，加载文档内容，并运行 <script> 元素中的代码（内联脚本和外部脚本）。脚本通常按照它们在文档中出现的顺序运行，尽管可以通过我们描述的 `async` 和 `defer` 属性来修改此默认顺序。任何单个脚本中的 `JavaScript` 代码都是从上到下运行的，当然，受 `JavaScript` 的条件、循环和其他控制语句的影响。有些脚本在第一阶段实际上并不执行任何操作，而只是定义在第二阶段使用的函数和类。其他脚本可能在第一阶段执行重要工作，然后在第二阶段执行任何操作。想象一下文档末尾的脚本，该脚本查找文档中的所有 `<h1>` 和 `<h2>` 标记，并通过在文档开头生成和插入目录来修改文档。这完全可以在第一阶段完成。
+
+> 一旦文档加载并且所有脚本运行完毕，`JavaScript` 执行就进入第二阶段。此阶段是异步且事件驱动的。如果脚本要参与第二阶段，那么它在第一阶段必须完成的一件事是注册至少一个将异步调用的事件处理程序或其他回调函数。在事件驱动的第二阶段中，Web 浏览器调用事件处理函数和其他回调来响应异步发生的事件。事件处理程序最常被调用以响应用户输入（鼠标单击、击键等），但也可能由网络活动、文档和资源加载、经过的时间或 `JavaScript` 代码中的错误触发。
+
+> 事件驱动阶段最先发生的一些事件是`DOMContentLoaded`和`load`事件。当 `HTML` 文档完全加载和解析时，会触发`DOMContentLoaded`。当所有文档的外部资源（例如图像）也完全加载时，将触发`load`事件。 `JavaScript` 程序通常使用这些事件之一作为触发器或启动信号。常见的情况是，程序的脚本定义了函数，但除了在事件驱动执行阶段开始时注册由“load”事件触发的事件处理函数之外，不采取任何其他操作。然后，正是这个`load`事件处理程序操纵文档并执行程序应该执行的任何操作。请注意，在 `JavaScript` 编程中，事件处理程序函数（例如此处描述的`load`事件处理程序）用于注册其他事件处理程序是很常见的。
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>加载事件测试</title>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        console.log('DOMContentLoaded event fired')
+        checkReadyState()
+      })
+
+      window.addEventListener('load', function () {
+        console.log('Load event fired')
+        checkReadyState()
+      })
+
+      function checkReadyState() {
+        console.log('Document readyState:', document.readyState)
+      }
+    </script>
+  </head>
+  <body>
+    <h1>加载事件测试</h1>
+    <img
+      src="https://img.iplaysoft.com/wp-content/uploads/2019/free-images/free_stock_photo_2x.jpg!0x0.webp"
+      alt="用于延迟加载事件的大图像"
+    />
+    <p>打开浏览器的控制台查看各种加载事件和readyState检查的输出</p>
+  </body>
+</html>
+```
+>+ 浏览器在 `Document` 对象上触发`DOMContentLoaded`事件。这标志着从同步脚本执行阶段到异步、事件驱动的程序执行阶段的转变。但请注意，此时可能仍有异步脚本尚未执行
+>+ 此时文档已完全解析，但浏览器可能仍在等待加载其他内容，例如图像。当所有此类内容完成加载，并且所有异步脚本已加载并执行时，`document.readyState` 属性将更改为`complete`，并且 Web 浏览器会在 `Window` 对象上触发`load`事件
+>+ 从此时起，将异步调用事件处理程序以响应用户输入事件、网络事件、计时器到期等。
+
+#### 15.1.6 程序输入输出
+>+ 客户端 JavaScript 可以使用所显示文档的 `URL` 作为 `document.URL`。如果将此字符串传递给 `URL()` 构造函数
+>+ HTTP“Cookie”请求标头的内容可作为 `document.cookie` 供客户端代码使用
+>+ 全局 `navigator` 属性提供对有关 Web 浏览器、其运行的操作系统以及每个浏览器功能的信息的访问。例如，`navigator.userAgent` 是标识 Web 浏览器的字符串，`navigator.language` 是用户的首选语言，`navigator.hardwareConcurrency` 返回可用于 Web 浏览器的逻辑 CPU 数量。同样，全局屏幕属性通过 `screen.width` 和 `screen.height` 属性提供对用户显示尺寸的访问。
+#### 15.1.7 程序错误
+> 与直接在操作系统之上运行的应用程序（例如 Node 应用程序）不同，Web 浏览器中的 JavaScript 程序不会真正“崩溃”。如果 JavaScript 程序运行时发生异常，并且没有 catch 语句来处理该异常，则开发人员控制台中将显示错误消息，但已注册的任何事件处理程序将继续运行并响应事件
+
+> 如果您想定义一个在发生此类未捕获的异常时调用的最后手段的错误处理程序，请将 Window 对象的 onerror 属性设置为错误处理程序函数。当未捕获的异常在调用堆栈中一直向上传播并且错误消息即将在开发人员控制台中显示时，将使用三个字符串参数调用 window.onerror 函数。 window.onerror 的第一个参数是描述错误的消息。第二个参数是一个字符串，其中包含导致错误的 JavaScript 代码的 URL。第三个参数是文档中发生错误的行号。如果 onerror 处理程序返回 true，它会告诉浏览器该处理程序已处理错误并且不需要采取进一步的操作，换句话说，浏览器不应显示自己的错误消息。
+
+> 当 Promise 被拒绝并且没有 .catch() 函数来处理它时，这种情况很像未处理的异常：程序中出现意外错误或逻辑错误。您可以通过定义 window.onunhandledrejection 函数或使用 window.addEventListener() 注册“unhandledrejection”事件的处理程序来检测这一点。传递给此处理程序的事件对象将具有一个 Promise 属性，其值为被拒绝的 Promise 对象，以及一个 Reason 属性，其值为将传递给 .catch() 函数的值。与前面描述的错误处理程序一样，如果您对未处理的拒绝事件对象调用 PreventDefault()，它将被视为已处理，并且不会在开发人员控制台中导致错误消息。
+
+> 通常不需要定义 onerror 或 onunhandledrejection 处理程序，但如果您想向服务器报告客户端错误（例如，使用 fetch() 函数发出 HTTP POST 请求），它作为遥测机制非常有用），以便您可以获得有关用户浏览器中发生的意外错误的信息。 
+### 15.2 `events`
+#### 15.2.6 调度自定义事件
+```js
+// 调度自定义事件，携带的属性为 `detail`
+document.dispatchEvent(new CustomEvent("busy", { detail: true }));
+
+fetch(url)
+  .then(handleNetworkResponse)
+  .catch(handleNetworkError)
+  .finally(() => {
+      // 请求结束，事件调度为空闲
+      document.dispatchEvent(new CustomEvent("busy", { detail: false }));
+  });
+
+// 监听事件（自定义事件`busy`）
+document.addEventListener("busy", (e) => {
+    if (e.detail) {
+        showSpinner();
+    } else {
+        hideSpinner();
+    }
+});
+
+```
+### 15.3 Scripting Documents
+> 使用 DOM API 生成目录
+```js
+/**
+ * TOC.js: 为文档创建目录。
+ *
+ * 当DOM内容加载事件触发时运行此脚本，并自动为文档生成目录。
+ * 它没有定义任何全局符号，所以不会与其他脚本冲突。
+ *
+ * 当此脚本运行时，它首先寻找一个ID为 "TOC" 的文档元素。
+ * 如果没有这样的元素，它将在文档开始处创建一个。接下来，该
+ * 函数查找所有 <h2> 到 <h6> 的标签，将它们视为节标题，
+ * 并在TOC元素内创建目录。生成的锚名以 "TOC" 开头，因此您
+ * 应避免在自己的HTML中使用此前缀。
+ *
+ * 可以用CSS对生成的TOC条目进行样式设置。所有条目都有一个
+ * "TOCEntry" 类。条目还具有与节标题级别相对应的类。
+ * 例如: <h1> 标签生成 "TOCLevel1" 类的条目，<h2> 标签生成 "TOCLevel2" 类的条目，依此类推。
+ **/
+document.addEventListener("DOMContentLoaded", () => {
+    // 寻找TOC容器元素。如果没有，就在文档开始处创建一个。
+    let toc = document.querySelector("#TOC");
+    if (!toc) {
+        toc = document.createElement("div");
+        toc.id = "TOC";
+        document.body.prepend(toc);
+    }
+
+    // 找到所有章节标题元素。
+    let headings = document.querySelectorAll("h2,h3,h4,h5,h6");
+
+    // 初始化一个跟踪节编号的数组。
+    let sectionNumbers = [0,0,0,0,0];
+
+    // 循环遍历我们找到的章节标题元素。
+    for(let heading of headings) {
+        // 如果标题在TOC容器内，就跳过。
+        if (heading.parentNode === toc) {
+            continue;
+        }
+
+        // 找出是哪个级别的标题。
+        let level = parseInt(heading.tagName.charAt(1)) - 1;
+
+        // 递增此标题级别的节编号并将所有较低标题级别的编号重置为零。
+        sectionNumbers[level-1]++;
+        for(let i = level; i < sectionNumbers.length; i++) {
+            sectionNumbers[i] = 0;
+        }
+
+        // 现在组合所有标题级别的节编号以产生像2.3.1这样的节编号。
+        let sectionNumber = sectionNumbers.slice(0, level).join(".");
+
+        // 将节编号添加到章节标题中。
+        let span = document.createElement("span");
+        span.className = "TOCSectNum";
+        span.textContent = sectionNumber;
+        heading.prepend(span);
+
+        // 将标题包装在命名锚中以便我们可以链接到它。
+        let anchor = document.createElement("a");
+        let fragmentName = `TOC${sectionNumber}`;
+        anchor.name = fragmentName;
+        heading.before(anchor);
+        anchor.append(heading);
+
+        // 现在创建一个链接到此章节的链接。
+        let link = document.createElement("a");
+        link.href = `#${fragmentName}`;
+
+        // 将标题文本复制到链接中。这是对innerHTML的安全使用。
+        link.innerHTML = heading.innerHTML;
+
+        // 将链接放在可基于级别进行样式设置的div中。
+        let entry = document.createElement("div");
+        entry.classList.add("TOCEntry", `TOCLevel${level}`);
+        entry.append(link);
+
+        // 将div添加到TOC容器中。
+        toc.append(entry);
+    }
+});
+```
+### 15.6 web 组件
+#### 15.6.5 示例： <search-box> Web 组件
+```js
+/**
+ * 这个类定义了一个自定义HTML <search-box> 元素，它显示了一个<input>文本输入框和两个图标或表情符号。
+ * 默认情况下，它在文本字段的左侧显示一个放大镜表情符号（表示搜索），在文本字段的右侧显示一个X表情符号（表示取消）。
+ * 它隐藏了输入字段的边框，并围绕自己显示边框，从而营造了两个表情符号在输入字段内的外观。
+ * 同样地，当内部输入字段被聚焦时，焦点环将显示在<search-box>周围。
+ *
+ * 您可以通过包括具有slot="left"和slot="right"属性的<span>或<img><search-box>的子元素来覆盖默认图标。
+ *
+ * <search-box>支持正常的HTML disabled和hidden属性，
+ * 还支持size和placeholder属性，它们对于此元素与<input>元素的含义相同。
+ *
+ * 内部<input>元素的输入事件冒泡，并以其目标字段设置为<search-box>元素显示。
+ *
+ * 当用户点击左侧表情符号（放大镜）时，元素会触发一个"search"事件，并将详细属性设置为当前输入字符串。
+ * 当内部文本字段生成"change"事件时（文本已更改，并且用户键入Return或Tab时），“搜索”事件也会被触发。
+ *
+ * 当用户点击右侧表情符号（X）时，元素会触发一个"clear"事件。
+ * 如果没有处理程序调用preventDefault()在事件上，则元素在事件调度完成后清除用户的输入。
+ *
+ * 请注意，没有onsearch和onclear属性或属性：只能使用addEventListener()注册"search"和"clear"事件的处理程序。
+ */
+class SearchBox extends HTMLElement {
+    constructor() {
+        super(); // 调用超类构造函数；必须首先。
+
+        // 创建一个shadow DOM树，并将其附加到此元素，设置this.shadowRoot的值。
+        this.attachShadow({mode: "open"});
+
+        // 克隆定义此自定义组件的后代和样式表的模板，并将该内容附加到shadow root。
+        this.shadowRoot.append(SearchBox.template.content.cloneNode(true));
+
+        // 获取shadow DOM中重要元素的引用
+        this.input = this.shadowRoot.querySelector("#input");
+        let leftSlot = this.shadowRoot.querySelector('slot[name="left"]');
+        let rightSlot = this.shadowRoot.querySelector('slot[name="right"]');
+
+        // 当内部输入字段获得或失去焦点时，设置或删除
+        // "focused"属性，这将导致我们的内部样式表
+        // 在整个组件上显示或隐藏虚假焦点环。注意
+        // "blur"和"focus"事件冒泡并似乎起源于
+        // <search-box>。
+        this.input.onfocus = () => { this.setAttribute("focused", ""); };
+        this.input.onblur = () => { this.removeAttribute("focused");};
+
+        // 如果用户点击放大镜，触发"search"事件。
+        // 如果输入字段触发"change"事件也触发它。
+        // （“change”事件不会冒泡到Shadow DOM之外。）
+        leftSlot.onclick = this.input.onchange = (event) => {
+            event.stopPropagation();    // 防止点击事件冒泡
+            if (this.disabled) return;  // 禁用时不执行任何操作
+            this.dispatchEvent(new CustomEvent("search", {
+                detail: this.input.value
+            }));
+        };
+
+        // 如果用户点击X，触发"clear"事件。
+        // 如果未在事件上调用preventDefault()，清除输入。
+        rightSlot.onclick = (event) => {
+            event.stopPropagation();    // 不要让点击冒泡
+            if (this.disabled) return;  // 如果禁用，不要执行任何操作
+            let e = new CustomEvent("clear", { cancelable: true });
+            this.dispatchEvent(e);
+            if (!e.defaultPrevented) {  // 如果事件未被"取消"
+                this.input.value = "";  // 清除输入字段
+            }
+        };
+    }
+
+    // 当我们的一些属性被设置或更改时，我们需要在内部<input>元素上设置
+    // 相应的值。这个生命周期方法，与下面的静态observedAttributes属性一起，
+    // 负责此项工作。
+    attributeChangedCallback(name, oldValue, newValue) {
+        if (name === "disabled") {
+            this.input.disabled = newValue !== null;
+        } else if (name === "placeholder") {
+            this.input.placeholder = newValue;
+        } else if (name === "size") {
+            this.input.size = newValue;
+        } else if (name === "value") {
+            this.input.value = newValue;
+        }
+    }
+
+    // 最后，我们为与我们支持的HTML属性对应的属性定义属性getter和setter。
+    // getter简单地返回属性的值（或存在）。setter只是设置属性的值（或存在）。
+    // 当setter方法更改属性时，浏览器将自动调用上面的attributeChangedCallback。
+
+    get placeholder() { return this.getAttribute("placeholder"); }
+    get size() { return this.getAttribute("size"); }
+    get value() { return this.getAttribute("value"); }
+    get disabled() { return this.hasAttribute("disabled"); }
+    get hidden() { return this.hasAttribute("hidden"); }
+
+    set placeholder(value) { this.setAttribute("placeholder", value); }
+    set size(value) { this.setAttribute("size", value); }
+    set value(value) { this.setAttribute("value", value); }
+    set disabled(value) { this.toggleAttribute("disabled", value); }
+    set hidden(value) { this.toggleAttribute("hidden", value); }
+}
+
+// 由于模板的内容不会更改，因此我们可以创建一次模板并在所有<search-box>元素中共享该模板。
+// 我们在外部代码中定义它，以便不在构造函数中反复克隆它。
+SearchBox.template = document.createElement("template");
+SearchBox.template.innerHTML = `
+  <style>
+    :host { display: inline-block; border: solid thin black; padding: 4px; }
+    #input { border: none; outline: none; padding: 4px; }
+    :host([focused]) { outline: Highlight auto 5px; outline-color: -webkit-focus-ring-color; }
+    slot[name="left"], slot[name="right"] { cursor: pointer; }
+    slot[name="left"]::slotted(*) { margin-right: 4px; }
+    slot[name="right"]::slotted(*) { margin-left: 4px; }
+    :host([disabled]) slot[name="left"], :host([disabled]) slot[name="right"] { cursor: not-allowed; }
+  </style>
+  <slot name="left"><span>🔍</span></slot><input id="input"><slot name="right"><span>❌</span></slot>
+`;
+
+// 最后，定义这个元素的标签名和类名，以便浏览器知道如何将它实例化。
+customElements.define('search-box', SearchBox);
+
+```
+### 15.10 Location, Navigation, and History
+#### 15.10.4 History Management with pushState()
+> 示例1
+```js
+// 定义导航函数
+function navigate(page, replace = false) {
+  const state = { page };
+  const title = `Page ${page}`;
+  const url = `/page${page}`;
+  
+  if (replace) {
+    window.history.replaceState(state, title, url);
+  } else {
+    window.history.pushState(state, title, url);
+  }
+  
+  renderPage(page); // 渲染页面的函数
+}
+
+// 监听popstate事件来处理浏览器的前进和后退按钮
+window.addEventListener('popstate', (event) => {
+  const state = event.state;
+  if (state && state.page) {
+    renderPage(state.page);
+  }
+});
+
+// 初始导航
+navigate(1, true);
+
+// 示例使用
+document.getElementById('link1').addEventListener('click', () => navigate(2));
+document.getElementById('link2').addEventListener('click', () => navigate(3));
+
+```
+> 示例2
+```js
+// 设置初始状态
+window.history.replaceState({ color: 'red' }, '', '/color/red');
+changeColor('red');
+
+// 监听颜色按钮点击
+document.getElementById('blueButton').addEventListener('click', () => {
+  window.history.pushState({ color: 'blue' }, '', '/color/blue');
+  changeColor('blue');
+});
+
+// 监听popstate事件来处理浏览器的前进和后退按钮
+window.addEventListener('popstate', (event) => {
+  const state = event.state;
+  if (state && state.color) {
+    changeColor(state.color);
+  }
+});
+
+// 定义颜色更改函数
+function changeColor(color) {
+  document.body.style.backgroundColor = color;
+}
+    
+```
+> 示例3 （随书案例）
+```html
+<html lang="zh">
+  <head>
+    <title>我正在想一个数字...</title>
+    <style>
+      body {
+        height: 250px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-evenly;
+      }
+      #heading {
+        font: bold 36px sans-serif;
+        margin: 0;
+      }
+      #container {
+        border: solid black 1px;
+        height: 1em;
+        width: 80%;
+      }
+      #range {
+        background-color: green;
+        margin-left: 0%;
+        height: 1em;
+        width: 100%;
+      }
+      #input {
+        display: block;
+        font-size: 24px;
+        width: 60%;
+        padding: 5px;
+      }
+      #playagain {
+        font-size: 24px;
+        padding: 10px;
+        border-radius: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 id="heading">我正在想一个数字...</h1>
+    <!-- 没有被排除的数字的可视化表示 -->
+    <div id="container"><div id="range"></div></div>
+    <!-- 用户输入猜测的地方 -->
+    <input id="input" type="text" />
+    <!-- 游戏结束后才显示的一个按钮，重新加载并没有搜索字符串 -->
+    <button id="playagain" hidden onclick="location.search='';">重新玩</button>
+    <script>
+      /**
+       * 这个GameState类的实例代表我们的数字猜测游戏的内部状态。该类定义了用于
+       * 从不同来源初始化游戏状态的静态工厂方法、基于新猜测更新状态的方法，以及基于
+       * 当前状态修改文档的方法。
+       */
+      class GameState {
+        // 这是一个创建新游戏的工厂函数
+        static newGame() {
+          let s = new GameState()
+          s.secret = s.randomInt(0, 100) // 一个整数：0 < n < 100
+          s.low = 0 // 猜测必须大于此值
+          s.high = 100 // 猜测必须小于此值
+          s.numGuesses = 0 // 已经猜了多少次
+          s.guess = null // 上一次的猜测是什么
+          return s
+        }
+
+        // 当我们使用history.pushState()保存游戏状态时，保存的只是一个普通的
+        // JavaScript对象，而不是GameState的实例。所以这个工厂函数基于我们从
+        // popstate事件获取的普通对象重新创建GameState对象。
+        static fromStateObject(stateObject) {
+          let s = new GameState()
+          for (let key of Object.keys(stateObject)) {
+            s[key] = stateObject[key]
+          }
+          return s
+        }
+
+        // 为了能够启用书签功能，我们需要能够将任何游戏的状态编码为URL。
+        // 使用URLSearchParams很容易做到这一点。
+        toURL() {
+          let url = new URL(window.location)
+          url.searchParams.set('l', this.low)
+          url.searchParams.set('h', this.high)
+          url.searchParams.set('n', this.numGuesses)
+          url.searchParams.set('g', this.guess)
+          // 注意，我们不能在url中编码秘密数字，否则它
+          // 会泄露秘密。如果用户用这些参数将页面标记为书签，
+          // 然后返回，我们将在low和high之间简单地选择一个新的随机数字。
+          return url.href
+        }
+
+        // 这是一个工厂函数，根据指定的URL创建并初始化一个新的GameState对象。
+        // 如果URL不包含我们需要的参数，或者它们格式不正确，它就会返回null。
+        static fromURL(url) {
+          let s = new GameState()
+          let params = new URL(url).searchParams
+          s.low = parseInt(params.get('l'))
+          s.high = parseInt(params.get('h'))
+          s.numGuesses = parseInt(params.get('n'))
+          s.guess = parseInt(params.get('g'))
+
+          // 如果URL缺少我们需要的任何参数，或者
+          // 它们没有解析为整数，那么返回null；
+          if (isNaN(s.low) || isNaN(s.high) || isNaN(s.numGuesses) || isNaN(s.guess)) {
+            return null
+          }
+
+          // 每次从URL还原游戏时，都会选择正确范围内的新秘密数字。
+          s.secret = s.randomInt(s.low, s.high)
+          return s
+        }
+
+        // 返回一个整数n，min < n < max
+        randomInt(min, max) {
+          return min + Math.ceil(Math.random() * (max - min - 1))
+        }
+
+        // 修改文档以显示游戏的当前状态。
+        render() {
+          let heading = document.querySelector('#heading') // 顶部的<h1>
+          let range = document.querySelector('#range') // 显示猜测范围
+          let input = document.querySelector('#input') // 猜测输入框
+          let playagain = document.querySelector('#playagain')
+
+          // 更新文档标题和标题
+          heading.textContent =
+            document.title = `我正在想一个数字，介于 ${this.low} 和 ${this.high} 之间。`
+
+          // 更新数字的可视范围
+          range.style.marginLeft = `${this.low}%`
+          range.style.width = `${this.high - this.low}%`
+
+          // 确保输入字段为空并聚焦。
+          input.value = ''
+          input.focus()
+
+          // 基于用户的最后一个猜测显示反馈。输入字段为空，
+          // 占位符将显示。
+          if (this.guess === null) {
+            input.placeholder = '输入你的猜测并按回车'
+          } else if (this.guess < this.secret) {
+            input.placeholder = `${this.guess} 太低了。再猜一次`
+          } else if (this.guess > this.secret) {
+            input.placeholder = `${this.guess} 太高了。再猜一次`
+          } else {
+            input.placeholder = document.title = `${this.guess} 是正确的!`
+            heading.textContent = `你在 ${this.numGuesses} 次猜测中赢了!`
+            playagain.hidden = false
+          }
+        }
+
+        // 基于用户猜测更新游戏状态。如果状态已更新，则返回true，
+        // 否则返回false。
+        updateForGuess(guess) {
+          // 检查猜测是否合法。如果不是，则返回false，状态未改变。
+          if (isNaN(guess) || guess < this.low || guess > this.high) {
+            return false
+          }
+          this.guess = guess
+          this.numGuesses++
+
+          // 根据猜测更新范围。
+          if (guess < this.secret) {
+            this.low = guess + 1
+          } else if (guess > this.secret) {
+            this.high = guess
+          }
+
+          // 如果用户赢了，就隐藏猜测输入字段和再玩一次的按钮。
+          if (guess === this.secret) {
+            document.querySelector('#input').hidden = true
+          }
+
+          return true // 状态已更新
+        }
+      }
+
+      // 有了GameState类的定义，使游戏工作只是在适当的时候初始化、更新、保存和渲染状态对象的问题。
+
+      // 当我们首次加载时，我们尝试从URL获取游戏状态，如果失败，则开始新游戏。
+      // 因此，如果用户添加书签，该游戏可以从URL还原。但是，如果我们加载没有查询参数的页面，我们将只得到一个新游戏。
+      let gamestate = GameState.fromURL(window.location) || GameState.newGame()
+
+      // 使用replaceState将游戏的初始状态保存到浏览器历史记录中，而不是用pushState()来保存此初始页面
+      history.replaceState(gamestate, '', gamestate.toURL())
+
+      // 显示这个初始状态
+      gamestate.render()
+
+      // 当用户猜测时，根据他们的猜测更新游戏状态，然后将新状态保存到浏览器历史记录中并呈现新状态
+      document.querySelector('#input').onchange = event => {
+        let guess = parseInt(event.target.value)
+        if (gamestate.updateForGuess(guess)) {
+          // 如果状态改变了...
+          history.pushState(gamestate, '', gamestate.toURL())
+          gamestate.render()
+        }
+      }
+
+      // 如果用户在历史记录中向前或向后浏览，我们将在窗口对象上收到一个popstate事件，并附带我们用pushState保存的状态对象副本。
+      // 当发生这种情况时，呈现新状态。
+      window.onpopstate = event => {
+        gamestate = GameState.fromStateObject(event.state)
+        gamestate.render()
+      }
+    </script>
+  </body>
+</html>
+```
+### 15.11 networking
+#### 15.11.2 Server-Sent Events
+> 主要是`EventSource` 
+> 示例1:
++ 客户端
+```html
+<html lang="">
+<head><title>SSE 聊天</title></head>
+<body>
+<!-- 聊天界面只是一个文本输入字段 -->
+<!-- 在这个输入字段前插入新的聊天消息 -->
+<input id="input" style="width:100%; padding:10px; border:solid black 2px"/>
+<script>
+    // 处理一些UI细节
+    let nick = prompt("输入你的昵称");              // 获取用户的昵称
+    let input = document.getElementById("input"); // 找到输入字段
+    input.focus();                                // 设置键盘焦点
+
+    // 使用 EventSource 注册新消息的通知
+    let chat = new EventSource("/chat");
+    chat.addEventListener("chat", event => {   // 当聊天消息到达时
+        let div = document.createElement("div"); // 创建一个 <div>
+        div.append(event.data);                  // 从消息中添加文本
+        input.before(div);                       // 在输入前添加 div
+        input.scrollIntoView();                  // 确保输入元素可见
+    });
+
+    // 使用 fetch 将用户的消息发布到服务器
+    input.addEventListener("change", ()=>{  // 当用户按下回车键时
+        fetch("/chat", {                    // 启动一个HTTP请求到此URL。
+            method: "POST",                 // 将其设为带有主体的POST请求
+            body: nick + ": " + input.value // 设置为用户的昵称和输入。
+        })
+                .catch(e => console.error);         // 忽略响应，但记录任何错误。
+        input.value = "";                   // 清空输入
+    });
+</script>
+</body>
+</html>
+
+```
++ 服务端
+```js
+// 这是服务器端的 JavaScript，意在通过 NodeJS 运行。
+// 它实现了一个非常简单、完全匿名的聊天室。
+// 通过 /chat 发布新消息，或从同一 URL 获取文本/事件流的消息。
+// 对 / 发出 GET 请求返回包含客户端聊天 UI 的简单 HTML 文件。
+const http = require("http");
+const fs = require("fs");
+const url = require("url");
+
+// 聊天客户端的HTML文件。下面使用。
+const clientHTML = fs.readFileSync("chatClient.html");
+
+// 我们将向其发送事件的 ServerResponse 对象数组
+let clients = [];
+
+// 创建新的服务器，并在端口8080上监听。
+// 连接到http://localhost:8080/来使用它。
+let server = new http.Server();
+server.listen(8080);
+
+// 当服务器收到新请求时，运行此函数
+server.on("request", (request, response) => {
+    // 解析请求的URL
+    let pathname = url.parse(request.url).pathname;
+
+    // 如果请求是 "/", 发送客户端聊天 UI。
+    if (pathname === "/") {  // 请求聊天UI
+        response.writeHead(200, {"Content-Type": "text/html"}).end(clientHTML);
+    }
+    // 除了 "/chat"，或者方法不是 "GET" 和 "POST" 之外的任何路径或方法，都返回404错误
+    else if (pathname !== "/chat" ||
+        (request.method !== "GET" && request.method !== "POST")) {
+        response.writeHead(404).end();
+    }
+    // 如果 /chat 请求是 GET，则客户端正在连接。
+    else if (request.method === "GET") {
+        acceptNewClient(request, response);
+    }
+    // 否则 /chat 请求是新消息的 POST
+    else {
+        broadcastNewMessage(request, response);
+    }
+});
+
+// 这处理了 /chat 端点的 GET 请求，当
+// 客户端创建新的 EventSource 对象时生成（或 EventSource 自动重新连接时）。
+function acceptNewClient(request, response) {
+    // 记住响应对象，以便我们可以向其发送将来的消息
+    clients.push(response);
+
+    // 如果客户端关闭连接，则从活动客户端数组中删除相应的响应对象
+    request.connection.on("end", () => {
+        clients.splice(clients.indexOf(response), 1);
+        response.end();
+    });
+
+    // 设置头部并向这个客户端发送初始聊天事件
+    response.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Connection": "keep-alive",
+        "Cache-Control": "no-cache"
+    });
+    response.write("event: chat\ndata: 已连接\n\n");
+
+    // 注意，我们有意不在此处调用 response.end()。
+    // 保持连接打开是 Server-Sent Events 工作的原因。
+}
+
+// 此函数在响应 /chat 端点的 POST 请求时调用
+// 客户端在用户输入新消息时发送
+async function broadcastNewMessage(request, response) {
+    // 首先，读取请求体以获取用户的消息
+    request.setEncoding("utf8");
+    let body = "";
+    for await (let chunk of request) {
+        body += chunk;
+    }
+
+    // 一旦我们读取了主体，就发送空响应并关闭连接
+    response.writeHead(200).end();
+
+    // 将消息格式化为 text/event-stream 格式，每行前缀为 "data: "
+    let message = "data: " + body.replace("\n", "\ndata: ");
+
+    // 给消息数据一个前缀，定义它为 "chat" 事件
+    // 并给它一个双换行后缀，标记事件的结束。
+    let event = `event: chat\n${message}\n\n`;
+
+    // 现在将此事件发送给所有监听的客户端
+    clients.forEach(client => client.write(event));
+}
+
+```
+> 示例2:
++ 客户端HTML文件（位于public文件夹）
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chat Room</title>
+</head>
+<body>
+  <div id="chat"></div>
+  <input id="message" type="text" placeholder="Type your message here">
+  <button onclick="sendMessage()">Send</button>
+  <script src="chat.js"></script>
+</body>
+</html>
+```
++ 客户端JS文件（`chat.js`,位于public文件夹）
+```js
+const eventSource = new EventSource('/events');
+
+eventSource.onmessage = function(e) {
+  const chat = document.getElementById('chat');
+  const message = document.createElement('div');
+  message.textContent = e.data;
+  chat.appendChild(message);
+};
+
+function sendMessage() {
+  const messageInput = document.getElementById('message');
+  const message = messageInput.value;
+  fetch('/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ message })
+  });
+  messageInput.value = '';
+}
+```
++ 服务器端代码（使用Node.js和Express）
+```js
+const express = require('express');
+const app = express();
+const port = 3000;
+
+app.use(express.static('public'));
+app.use(express.json());
+
+const clients = [];
+
+app.post('/send', (req, res) => {
+  const message = req.body.message;
+  clients.forEach(client => client.write(`data: ${message}\n\n`));
+  res.status(204).end();
+});
+
+app.get('/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders();
+
+  clients.push(res);
+  req.on('close', () => {
+    const index = clients.indexOf(res);
+    if (index !== -1) {
+      clients.splice(index, 1);
+    }
+  });
+});
+
+app.listen(port, () => {
+  console.log(`Chat app listening at http://localhost:${port}`);
+});
+```
+### 15.13 Worker Threads and Messaging
+#### 15.13.2 The Global Object in Workers
+> 当您使用 `Worker() `构造函数创建新的工作线程时，您可以指定 `JavaScript` 代码文件的 `URL`。该代码在一个新的、原始的 `JavaScript` 执行环境中执行，与创建工作线程的脚本隔离。该新执行环境的全局对象是 `WorkerGlobalScope` 对象。
+> `WorkerGlobalScope` 对象有一个 `postMessage()` 方法和一个 `onmessage` 事件处理程序属性，它们与 `Worker` 对象的方法和 `onmessage` 事件处理程序属性类似，但工作方向相反：在工作程序内部调用 `postMessage()` 会在工作程序外部生成消息事件，并从工作程序发送消息在 `worker` 外部被转化为事件并传递给 `onmessage` 处理程序。因为 `WorkerGlobalScope` 是工作程序的全局对象，所以 `postMessage()` 和 `onmessage` 对于工作程序代码来说看起来就像是全局函数和全局变量。
+> 由于 `WorkerGlobalScope` 是`worker`的全局对象，因此它具有核心 `JavaScript` 全局对象的所有属性，例如 `JSON` 对象、`isNaN()` 函数和 `Date()` 构造函数。不过除此之外，`WorkerGlobalScope` 还具有客户端 `Window` 对象的以下属性：
+> + `self` 是对全局对象本身的引用。 `WorkerGlobalScope` 不是 `Window` 对象，并且没有定义 `Window` 属性。
+> + 定时器方法 `setTimeout()`、`clearTimeout()`、`setInterval()` 和`clearInterval()`。
+> + `location`,属性引用 Location 对象，就像 `Window` 的 `location` 属性一样。 Location 对象具有属性 `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`,  `hash`。然而，在`worker`线程中，这些属性是只读的。
+> + `navigator` 属性引用 `Navigator` 对象，就像 `Window` 的 `navigator` 属性一样。`Navigator` 对象具有属性 `appName`、`appVersion`、`platform`、`userAgent` 和 `onLine`。
+> + 常用的事件目标方法 `addEventListener()` 和 `removeEventListener()` 。
+#### 15.13.3 Importing Code into a Worker
+>  WorkerGlobalScope 将 importScripts() 定义为所有`worker`都可以访问的全局函数：
+```js
+// Before we start working, load the classes and utilities we'll need
+importScripts("utils/Histogram.js", "utils/BitSet.js");
+
+```
+> `importScripts()` 接受一个或多个 URL 参数，每个参数都应引用一个 `JavaScript` 代码文件。相对 URL 是相对于传递给 `Worker() `构造函数的 URL 进行解析的（而不是相对于包含的文档）。 `importScripts()` 按照指定的顺序逐个同步加载并执行这些文件。如果加载脚本导致网络错误，或者执行引发任何类型的错误，则不会加载或执行任何后续脚本。使用 `importScripts()` 加载的脚本本身可以调用 `importScripts() `来加载它所依赖的文件。但请注意，`importScripts() `不会尝试跟踪已加载的脚本，也不会采取任何措施来防止依赖循环。
+> `importScripts()` 是一个同步函数：直到所有脚本加载并执行后它才会返回。 `importScripts()` 返回后，您就可以开始使用加载的脚本：不需要回调、事件处理程序、then() 方法或等待。一旦您内化了客户端 JavaScript 的异步特性，再次回到简单的同步编程就会感觉很奇怪。但这就是线程的美妙之处：您可以在工作线程中使用阻塞函数调用，而不会阻塞主线程中的事件循环，也不会阻塞其他工作线程中同时执行的计算。
+> `WORKERS` 中的模块 为了在 `Workers` 中使用模块，您必须将第二个参数传递给 `Worker()` 构造函数。第二个参数必须是一个类型属性设置为字符串“module”的对象。将 `type:“module”` 选项传递给 Worker() 构造函数非常类似于在 HTML <script> 标记上使用 `type=“module”` 属性：这意味着代码应被解释为模块，并且允许进口报关。如果您不指定 `type:“module”`，则代码将被解释为脚本，并且不允许导入。
+#### 15.13.5 postMessage(), MessagePorts, and MessageChannels
+> `MessageChannel` 是 HTML5 中引入的一个 API，用于创建新的消息通道。消息通道有两个端口，通过这两个端口，不同的文档或者 `web workers` 可以彼此通信。这在浏览器环境中的不同上下文之间进行消息传递是非常有用的。
+> `Web Workers` 允许在后台线程中运行 `JavaScript` 代码，不会影响主线程的执行。您可以通过使用 `MessageChannel` 在主线程和 `Worker` 之间进行通信。这是一个简单的例子：
+```js
+//主线程代码
+// 创建一个 Worker
+const myWorker = new Worker('worker.js');
+
+// 创建一个 MessageChannel
+const channel = new MessageChannel();
+// 
+// 向 Worker 发送 port2，以便在 Worker 中进行通信
+myWorker.postMessage('Here is your port', [channel.port2]);
+
+// 设置 port1 的消息处理程序
+channel.port1.onmessage = (e) => {
+  console.log('Received message from worker:', e.data);
+};
+
+// 可以通过 port1 向 Worker 发送消息
+channel.port1.postMessage('Message from main thread');
+//Worker 代码 (worker.js)
+// 监听主线程传来的消息
+self.onmessage = (e) => {
+  const port = e.ports[0];
+
+  port.onmessage = (event) => {
+    console.log('Received message from main thread:', event.data);
+    port.postMessage('Message from worker');
+  };
+};
+```
+>  `postMessage` 方法的第二个参数:
+> + 转移对象
+> 在 postMessage 方法中，第二个参数是一个转移对象的数组。这些对象会从发送方的上下文完全转移至接收方，而不是复制。转移后的对象在发送方的上下文中将不再可用。 这与传统的对象复制不同，传统的对象复制会在源和目标上下文中都保留该对象的副本。 例如，当您通过 postMessage 将 MessagePort 或 ArrayBuffer 对象转移时，该对象在发送方的上下文中将不再可用，只能在接收方的上下文中访问。
+> + 高效性
+> 对象的转移要比复制更高效，因为它不涉及对象内容的实际复制。它只是改变了对象的所有权，从而使对象从一个上下文转移到另一个上下文。 考虑一个包含大量数据的 ArrayBuffer 对象。通过传统的复制方式传输这样的对象可能需要相当多的时间和资源，因为必须创建对象的完整副本。而通过转移对象，可以几乎立即完成操作，因为不需要复制对象的内容。
+#### 15.13.6 使用 postMessage() 进行跨源消息传递
+> `Window` 的 `postMessage()` 方法与 `Worker` 的 `postMessage()` 方法略有不同。第一个参数仍然是一个任意消息，将由结构化克隆算法复制。但是列出要传输而不是复制的对象的可选第二个参数将成为可选的第三个参数。`window`的 `postMessage() `方法将字符串作为其所需的第二个参数。第二个参数应该是一个来源（协议、主机名和可选端口），指定您希望接收消息的人。如果您传递字符串“https://good.example.com”作为第二个参数，但您要发布消息的窗口实际上包含来自“https://malware.example.com”的内容，则您发送的消息发布的将不会被传递。如果您愿意将消息发送到来自任何来源的内容，则可以传递通配符“*”作为第二个参数。
+### 15.14 例子：mandelbrot 
+```js
+/*
+ * 这个类表示画布或图像的子矩形。我们使用Tiles来
+ * 将画布划分成可以由Workers独立处理的区域。
+ */
+class Tile {
+    constructor(x, y, width, height) {
+        this.x = x;                     // Tile对象的属性
+        this.y = y;                     // 表示瓦片在更大
+        this.width = width;             // 的矩形内的位置和大小
+        this.height = height;           // 。
+    }
+
+    // 这个静态方法是一个生成器，它将指定的宽度和高度的矩形
+    // 划分为指定的行数和列数，并生成numRows*numCols个Tile对象来覆盖矩形。
+    static *tiles(width, height, numRows, numCols) {
+        let columnWidth = Math.ceil(width / numCols);
+        let rowHeight = Math.ceil(height / numRows);
+
+        for(let row = 0; row < numRows; row++) {
+            let tileHeight = (row < numRows-1)
+                ? rowHeight                          // 大部分行的高度
+                : height - rowHeight * (numRows-1);  // 最后一行的高度
+            for(let col = 0; col < numCols; col++) {
+                let tileWidth = (col < numCols-1)
+                    ? columnWidth                    // 大部分列的宽度
+                    : width - columnWidth * (numCols-1); // 最后一列的宽度
+
+                yield new Tile(col * columnWidth, row * rowHeight,
+                    tileWidth, tileHeight);
+            }
+        }
+    }
+}
+
+/*
+ * 这个类表示一个工人池，所有工人运行相同的代码。您指定的
+ * 工人代码必须对收到的每条消息做出响应，通过执行某种计算
+ * 然后用计算结果发布一条消息。
+ *
+ * 给定WorkerPool和表示要执行的工作的消息，只需调用
+ * addWork()，并将消息作为参数。如果有一个Worker对象当前
+ * 处于空闲状态，该消息将立即发布给该工人。如果没有空闲的
+ * Worker对象，消息将排队，等待工人可用时再发布。
+ *
+ * addWork()返回一个Promise，当工作完成时，将解析为工人的
+ * 响应，或者如果工人抛出未处理的错误则会拒绝。
+ */
+class WorkerPool {
+    constructor(numWorkers, workerSource) {
+        this.idleWorkers = [];       // 当前未工作的工人
+        this.workQueue = [];         // 当前未处理的工作
+        this.workerMap = new Map();  // 将工人映射到resolve和reject函数
+
+        // 创建指定数量的工人，添加消息和错误处理程序，
+        // 并将它们保存在idleWorkers数组中。
+        for(let i = 0; i < numWorkers; i++) {
+            let worker = new Worker(workerSource);
+            worker.onmessage = message => {
+                this._workerDone(worker, null, message.data);
+            };
+            worker.onerror = error => {
+                this._workerDone(worker, error, null);
+            };
+            this.idleWorkers[i] = worker;
+        }
+    }
+
+    // 当工人完成工作时，通过发送消息或抛出错误，
+    // 调用此内部方法。
+    _workerDone(worker, error, response) {
+        // 查找此工人的resolve()和reject()函数，
+        // 然后从映射中删除工人的条目。
+        let [resolver, rejector] = this.workerMap.get(worker);
+        this.workerMap.delete(worker);
+
+        // 如果没有排队的工作，将此工人放回空闲工人列表。
+        // 否则，从队列中取出工作并发送给此工人。
+        if (this.workQueue.length === 0) {
+            this.idleWorkers.push(worker);
+        } else {
+            let [work, resolver, rejector] = this.workQueue.shift();
+            this.workerMap.set(worker, [resolver, rejector]);
+            worker.postMessage(work);
+        }
+
+        // 最后，解析或拒绝与工人关联的承诺。
+        error === null ? resolver(response) : rejector(error);
+    }
+
+    // 此方法将工作添加到工人池，并返回一个Promise，
+    // 当工作完成时，将解析为工人的响应。工作是通过postMessage()
+    // 传递给工人的值。如果有空闲的工人，工作消息将立即发送。
+    // 否则，它将排队直到工人可用。
+    addWork(work) {
+        return new Promise((resolve, reject) => {
+            if (this.idleWorkers.length > 0) {
+                let worker = this.idleWorkers.pop();
+                this.workerMap.set(worker, [resolve, reject]);
+                worker.postMessage(work);
+            } else {
+                this.workQueue.push([work, resolve, reject]);
+            }
+        });
+    }
+}
+
+/*
+ * 此类包含了渲染Mandelbrot集所需的状态信息。
+ * cx和cy属性给出了复平面中图像中心的点。perPixel属性指定
+ * 每个图像像素的复数的实部和虚部是如何变化的。
+ * maxIterations属性指定了我们为计算集合所付出的努力。
+ * 较大的数字需要更多的计算，但会产生更清晰的图像。
+ * 请注意，画布的大小不是状态的一部分。给定cx、cy和
+ * perPixel，我们只是按照当前大小渲染画布适合的Mandelbrot集的部分。
+ *
+ * 这种类型的对象用于history.pushState()，并用于从
+ * 书签或共享URL中读取所需的状态。
+ */
+class PageState {
+    // 这个工厂方法返回一个初始状态以显示整个集合。
+    static initialState() {
+        let s = new PageState();
+        s.cx = -0.5;
+        s.cy = 0;
+        s.perPixel = 3/window.innerHeight;
+        s.maxIterations = 500;
+        return s;
+    }
+
+    // 此工厂方法从URL获取状态，或返回null，如果
+    // 无法从URL读取有效状态。
+    static fromURL(url) {
+        let s = new PageState();
+        let u = new URL(url); // 从url的搜索参数中初始化状态。
+        s.cx = parseFloat(u.searchParams.get("cx"));
+        s.cy = parseFloat(u.searchParams.get("cy"));
+        s.perPixel = parseFloat(u.searchParams.get("pp"));
+        s.maxIterations = parseInt(u.searchParams.get("it"));
+        // 如果我们得到有效的值，返回PageState对象，否则返回null。
+        return (isNaN(s.cx) || isNaN(s.cy) || isNaN(s.perPixel)
+            || isNaN(s.maxIterations))
+            ? null
+            : s;
+    }
+
+    // 此实例方法将当前状态编码到浏览器当前位置的搜索参数中。
+    toURL() {
+        let u = new URL(window.location);
+        u.searchParams.set("cx", this.cx);
+        u.searchParams.set("cy", this.cy);
+        u.searchParams.set("pp", this.perPixel);
+        u.searchParams.set("it", this.maxIterations);
+        return u.href;
+    }
+}
+
+// 这些常量控制Mandelbrot集计算的并行性。
+// 您可能需要调整它们以在您的计算机上获得最佳性能。
+const ROWS = 3, COLS = 4, NUMWORKERS = navigator.hardwareConcurrency || 2;
+
+// 这是我们的Mandelbrot集程序的主类。只需调用
+// 构造函数，传入要渲染的<canvas>元素。程序
+// 假设<canvas>元素的样式使其始终与浏览器窗口一样大。
+class MandelbrotCanvas {
+    constructor(canvas) {
+        // 存储画布，获取其上下文对象，并初始化WorkerPool
+        this.canvas = canvas;
+        this.context = canvas.getContext("2d");
+        this.workerPool = new WorkerPool(NUMWORKERS, "mandelbrotWorker.js");
+
+        // 定义一些稍后将使用的属性
+        this.tiles = null;          // 画布的子区域
+        this.pendingRender = null;  // 我们目前没有渲染
+        this.wantsRerender = false; // 目前没有请求渲染
+        this.resizeTimer = null;    // 防止我们频繁调整大小
+        this.colorTable = null;     // 将原始数据转换为像素值。
+
+        // 设置我们的事件处理程序
+        this.canvas.addEventListener("pointerdown", e => this.handlePointer(e));
+        window.addEventListener("keydown", e => this.handleKey(e));
+        window.addEventListener("resize", e => this.handleResize(e));
+        window.addEventListener("popstate", e => this.setState(e.state, false));
+
+        // 从URL初始化我们的状态或从初始状态开始。
+        this.state =
+            PageState.fromURL(window.location) || PageState.initialState();
+
+        // 用历史机制保存此状态。
+        history.replaceState(this.state, "", this.state.toURL());
+
+        // 设置画布大小并获得覆盖它的瓦片数组。
+        this.setSize();
+
+        // 并将Mandelbrot集渲染到画布中。
+        this.render();
+    }
+
+    // 设置画布大小并初始化Tile对象的数组。这个方法被
+    // 构造函数调用，也被handleResize()方法调用，
+    // 当浏览器窗口调整大小时。
+    setSize() {
+        this.width = this.canvas.width = window.innerWidth;
+        this.height = this.canvas.height = window.innerHeight;
+        this.tiles = [...Tile.tiles(this.width, this.height, ROWS, COLS)];
+    }
+
+    // 这个函数更改PageState，然后重新渲染
+    // Mandelbrot集使用新的状态，并通过
+    // history.pushState()保存新状态。如果第一个参数是
+    // 一个函数，那么它将用状态对象作为其参数，并应该对状态进行更改。
+    // 如果第一个参数是一个对象，那么我们只是将该对象的属性复制到状态对象中。
+    // 如果可选的第二个参数为false，则不会保存新状态。
+    // （当我们收到popstate事件时，我们用第二个参数为false调用setState。）
+    setState(f, save=true) {
+        // 如果参数是一个函数，调用它以更新状态。
+        // 否则，将其属性复制到当前状态中。
+        if (typeof f === "function") {
+            f(this.state);
+        } else {
+            for(let property in f) {
+                this.state[property] = f[property];
+            }
+        }
+
+        // 无论如何，尽快开始渲染新状态。
+        this.render();
+
+        // 通常我们保存新的状态。除非我们被带着
+        // 第二个参数为false调用，这样我们会得到一个popstate事件。
+        if (save) {
+            history.pushState(this.state, "", this.state.toURL());
+        }
+    }
+
+    // 此方法异步将PageState对象指定的Mandelbrot集的一部分绘制到画布中。
+    // 它由构造函数调用，当状态改变时由setState()调用，
+    // 当画布大小改变时由resize事件处理程序调用。
+    render() {
+        // 有时用户可能会使用键盘或鼠标更快地请求渲染
+        // 比我们可以执行的要多。我们不想将所有渲染提交到工作人员池。
+        // 相反，如果我们正在渲染，我们会注意到需要重新渲染，当当前
+        // 渲染完成时，我们将渲染当前状态，可能跳过多个中间状态。
+        if (this.pendingRender) {        // 如果我们已经在渲染，
+            this.wantsRerender = true;   // 注意稍后重新渲染
+            return;                      // 现在不要做更多的事情。
+        }
+
+        // 获取我们的状态变量，并计算画布的左上角的复杂数字。
+        let {cx, cy, perPixel, maxIterations} = this.state;
+        let x0 = cx - perPixel * this.width/2;
+        let y0 = cy - perPixel * this.height/2;
+
+        // 对于我们的ROWS*COLS个瓦片，用消息调用addWork()
+        // 给mandelbrotWorker.js中的代码。将生成的Promise对象收集到数组中。
+        let promises = this.tiles.map(tile => this.workerPool.addWork({
+            tile: tile,
+            x0: x0 + tile.x * perPixel,
+            y0: y0 + tile.y * perPixel,
+            perPixel: perPixel,
+            maxIterations: maxIterations
+        }));
+
+        // 使用Promise.all()从promise数组中获得一个响应数组。
+        // 每个响应都是我们的瓦片之一的计算。
+        // 请注意，每个响应都包括Tile对象，其中包括
+        // ImageData对象，该对象包括迭代计数而不是像素值，
+        // 以及该瓦片的最小和最大迭代次数。
+        this.pendingRender = Promise.all(promises).then(responses => {
+
+            // 首先，在所有瓦片上找到最大和最小迭代次数。
+            // 我们需要这些数字，以便我们可以为像素分配颜色。
+            let min = maxIterations, max = 0;
+            for(let r of responses) {
+                if (r.min < min) min = r.min;
+                if (r.max > max) max = r.max;
+            }
+
+            // 现在我们需要一种方法将工人的原始迭代计数转换为
+            // 将在画布中显示的像素颜色。我们知道所有像素都有
+            // 在min和max迭代之间，所以我们预先计算每次迭代的颜色
+            // 并将它们存储在colorTable数组中。
+
+            // 如果我们还没有分配颜色表，或者它不再是正确的大小，
+            // 那么分配一个新的。
+            if (!this.colorTable || this.colorTable.length !== maxIterations+1){
+                this.colorTable = new Uint32Array(maxIterations+1);
+            }
+
+            // 给定最大和最小值，在颜色表中计算适当的值。属于集合的像素将是
+            // 完全不透明的黑色。集合外的像素将是半透明的黑色，较高的迭代计数将
+            // 导致较高的不透明度。具有最小迭代计数的像素将是透明的，并且白色的背景
+            // 将透视出来，从而产生灰度图像。
+            if (min === max) {                // 如果所有像素都是一样的，
+                if (min === maxIterations) {  // 那么把它们都变成黑色
+                    this.colorTable[min] = 0xFF000000;
+                } else {                      // 或者都透明。
+                    this.colorTable[min] = 0;
+                }
+            } else {
+                // 在min和max不同的正常情况下，使用
+                // 对数刻度将每个可能的迭代计数分配一个介于0和255之间的不透明度，
+                // 然后使用左移运算符将其转换为像素值。
+                let maxlog = Math.log(1+max-min);
+                for(let i = min; i <= max; i++) {
+                    this.colorTable[i] =
+                        (Math.ceil(Math.log(1+i-min)/maxlog * 255) << 24);
+                }
+            }
+
+            // 现在将每个响应的ImageData中的迭代数字翻译成colorTable中的颜色。
+            for(let r of responses) {
+                let iterations = new Uint32Array(r.imageData.data.buffer);
+                for(let i = 0; i < iterations.length; i++) {
+                    iterations[i] = this.colorTable[iterations[i]];
+                }
+            }
+
+            // 最后，使用putImageData()将所有imageData对象渲染到
+            // 其对应的画布瓦片中。
+            // （首先，尽管如此，删除可能已由pointerdown事件处理程序设置的画布上的任何CSS转换。）
+            this.canvas.style.transform = "";
+            for(let r of responses) {
+                this.context.putImageData(r.imageData, r.tile.x, r.tile.y);
+            }
+        })
+            .catch((reason) => {
+                // 如果我们的任何承诺中的任何事情出错，我们将在这里记录
+                // 一个错误。这不应该发生，但这将有助于调试，如果它确实发生。
+                console.error("Promise rejected in render():", reason);
+            })
+            .finally(() => {
+                // 当我们完成渲染时，清除pendingRender标志
+                this.pendingRender = null;
+                // 如果在我们忙的时候收到了渲染请求，现在重新渲染。
+                if (this.wantsRerender) {
+                    this.wantsRerender = false;
+                    this.render();
+                }
+            });
+    }
+
+    // 这里是我们的事件处理程序。可以通过阅读代码来理解它们的工作方式。
+    // 请注意，这些方法调用setState()更改状态，而不是直接调用render()。
+    handlePointer(event) { /* ... */ }
+    handleKey(event) { /* ... */ }
+    handleResize(event) { /* ... */ }
+}
+
+// 当DOM准备好时，我们创建MandelbrotCanvas对象。
+document.addEventListener("DOMContentLoaded", () => {
+    let canvas = document.getElementById("mandelbrot");
+    new MandelbrotCanvas(canvas);
+});
+
+```
++ 初始化
+> 通过 `DOMContentLoaded` 事件在 DOM 加载完成后创建 `MandelbrotCanvas` 对象。 定义了渲染的初始状态，如复数平面的中心、每像素的大小、最大迭代次数等。
++ 并行渲染
+> 使用 `WorkerPool` 类创建工人池，每个工人负责一个瓦片的渲染。 将画布划分为多个瓦片，每个瓦片代表一部分图像。通过` Web Workers` 并行处理每个瓦片的渲染，计算每个像素的迭代次数。 使用 `Promises` 管理并行任务，确保所有任务完成后进行下一步。
++ 颜色映射
+> 计算每个瓦片的最大和最小迭代次数。 创建颜色表，将迭代次数映射到颜色值。 通过颜色表将每个瓦片的迭代计数转换为像素颜色。
++ 图像渲染
+> 使用 `putImageData` 方法将所有 `ImageData` 对象渲染到对应的画布瓦片中。 清除任何可能由事件处理程序设置的画布上的 CSS 转换。
++ 事件处理
+> 定义了处理鼠标、键盘和窗口调整大小的事件处理程序。 通过事件处理程序更改状态并重新渲染，实现用户交互功能。
++ 错误处理和重渲染
+> 在 `Promise` 链中捕获任何可能的错误，并在控制台中记录。 如果在渲染过程中收到新的渲染请求，将在当前渲染完成后重新渲染
+
+### 15.15 总结和进一步阅读的建议
+#### 15.15.8 移动设备 API
+
+> + `Geolocation API` 允许 `JavaScript`（在用户许可的情况下）确定用户的物理位置。它在桌面和移动设备（包括 iOS 设备）上得到了很好的支持。使用 `navigator.geolocation.getCurrentPosition()` 请求用户的当前位置，并使用 `navigator.geolocation.watchPosition()` 注册当用户位置发生变化时调用的回调。
+> + `navigator.vibrate()` 方法使移动设备（但不是 iOS）振动。通常，这只允许响应用户手势，但调用此方法将允许您的应用程序提供手势已被识别的无声反馈。
+> + `ScreenOrientation API` 使 Web 应用程序能够查询移动设备屏幕的当前方向，并将自身锁定为横向或纵向。
+> + 窗口对象上的 `devicemotion` 和 `deviceorientation` 事件报告设备的加速计和磁力计数据，使您能够确定设备如何加速以及用户如何在空间中定位它。 （这些事件在 iOS 上有效。）
+> + 除了 `Android` 设备上的 `Chrome` 之外，传感器 API 尚未得到广泛支持，但它使 `JavaScript` 能够访问全套移动设备传感器，包括加速度计、陀螺仪、磁力计和环境光传感器。例如，这些传感器使 `JavaScript` 能够确定用户面向的方向或检测用户何时摇动手机。
+#### 15.15.9 Binary APIs
++ Blob 类
+> Blob 对象表示不可变的原始二进制数据。`Blob` 表示的数据不一定是 `JavaScript` 原生格式。可以使用 `FileReader` 对象或 Blob 方法来读取内容。
+> + `size`: Blob 对象的大小，以字节为单位。
+> + `type`: Blob 对象的MIME类型。
+```js
+// 创建 Blob 对象
+const blob = new Blob(['Hello World'], { type: 'text/plain' });
+
+// 输出属性
+console.log(blob.size); // 11
+console.log(blob.type); // "text/plain"
+
+```
++ `File` 类
+> `File` 类是 `Blob` 的子类，用于表示用户系统上的文件。
+> + `name`: 文件的名称。
+> + `lastModified`: 文件的最后修改时间，以毫秒为单位。
+```js
+const fileInput = document.getElementById('fileInput');
+fileInput.addEventListener('change', function() {
+  const file = this.files[0];
+
+  // 输出属性
+  console.log(file.name);
+  console.log(file.lastModified);
+});
+```
++ FileReader 类
+> `FileReader` 类用于异步读取存储在用户计算机上的文件（Blob对象包括File对象）
+> + `readAsArrayBuffer(blob)`: 读取文件内容为 `ArrayBuffer`。
+> + `readAsText`(blob, [encoding]): 读取文件内容为文本。
+```js
+const reader = new FileReader();
+
+reader.onload = function() {
+  console.log(this.result); // 文件内容
+};
+
+const file = fileInput.files[0];
+reader.readAsText(file); // 读取文件为文本
+```
++ Blob 的 text() 和 arrayBuffer() 方法
+```js
+blob.text().then(text => console.log(text)); // Hello World
+blob.arrayBuffer().then(buffer => console.log(new Uint8Array(buffer))); // Uint8Array(11) [ 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100 ]
+
+```
++  Stream() 方法
+> Blob 的 stream() 方法返回一个可读流，可以逐块读取 Blob 的内容。
+```js
+const stream = blob.stream();
+const reader = stream.getReader();
+
+reader.read().then(({ value, done }) => {
+  console.log(new TextDecoder().decode(value)); // Hello World
+});
+
+```
+
+
+#### 15.15.10 Media APIs
+> `navigator.mediaDevices.getUserMedia()` 函数允许 `JavaScript` 请求访问用户的麦克风和/或摄像机。成功的请求会生成 `MediaStream` 对象。视频流可以显示在 `<video>` 标记中（通过将 `srcObject` 属性设置为流）。可以使用 `canvas drawImage()` 函数将视频的静止帧捕获到屏幕外 `<canvas>` 中，从而生成分辨率相对较低的照片。 `getUserMedia()` 返回的音频和视频流可以使用 `MediaRecorder` 对象记录并编码为 `Blob`。
+#### 15.15.11 密码学和相关 API
+> `Window` 对象的 `crypto` 属性公开了用于加密安全伪随机数的 `getRandomValues()` 方法。其他加密、解密、密钥生成、数字签名等方法可通过 `crypto.subtle` 获得。该属性的名称是对每个使用这些方法的人的警告，正确使用加密算法很困难，并且除非您真正知道自己在做什么，否则不应使用这些方法。此外，`crypto.subtle` 的方法仅适用于在通过安全 HTTPS 连接加载的文档中运行的 `JavaScript` 代码。
+
