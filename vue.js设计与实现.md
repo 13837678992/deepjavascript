@@ -797,3 +797,672 @@ setTimeout(()=>{
 ```
 如以上代码所示，我们修改了两次` obj.foo `的值，第一次修改是 立即执行的，这会导致 `watch` 的回调函数执行。由于我们在回调函数 内调用了 `onInvalidate`，所以会注册一个过期回调，接着发送请求 A。假设请求 A 需要 1000ms 才能返回结果，而我们在 200ms 时第二次 修改了 `obj.foo` 的值，这又会导致 `watch` 的回调函数执行。这时要 注意的是，在我们的实现中，每次执行回调函数之前要先检查过期回 调是否存在，如果存在，会优先执行过期回调。由于在 `watch` 的回调 函数第一次执行的时候，我们已经注册了一个过期回调，所以在 `watch` 的回调函数第二次执行之前，会优先执行之前注册的过期回 调，这会使得第一次执行的副作用函数内闭包的变量 `expired` 的值变 为 `true`，即副作用函数的执行过期了。于是等请求 A 的结果返回时， 其结果会被抛弃，从而避免了过期的副作用函数带来的影响。
 
+### 第 5 章 非原始值的响应式方案
+#### 5.1 理解proxy 和 reflect
+```js
+const obj = {
+    foo: 1,
+    get bar() {
+        return this.foo
+    },
+}
+effect(){
+    console.log(obj.bar)
+}
+p.foo++
+
+```
+在上面的代码中`p.foo++`在修改之后，没有执行`effect`，这是由于在执行的时候没有收集`obj.bar`的依赖，所以在修改`foo`的值之后，没有执行`effect`。所以我们需要在`get`中收集依赖，这样就可以在修改`foo`的值之后，执行`effect`。原因就是`target[key]`没有触发`effect`收集，这里的`trach`是`obj`属于非响应式数据，`Reflect.get`可以解决这个问题。
+
+```js
+const p = new Proxy(obj,{
+    get(target,key,receiver){
+        track[target,key]
+      return Reflect.get(target,key,receiver)
+    }
+}) 
+```
+这里的`receiver`指的是响应式数据`p`，这样就可以实现`effect`的收集。
+#### 5.2 `javaScript`对象及`Proxy`的工作原理
+在`javaScript`中，有两种对象，一种是常规对象，一种是异质对象。通过内部方法和内部槽来区份，例如函数对象就会部署`[[call]]`内部方法，而数组对象就会部署`[[length]]`内部槽。
+#### 5.3 如何代理对象
+在代理对象的时候，除了基础的`[[get]],[[set]]`，还有`for in `、`in`、`delete`。
+##### in
+对于`in`的操作，对应的是`[[HasProperty]]`，在`Proxy`中，对应的就是`has`。
+```js
+const obj = {foo:1}
+const p = new Proxy(obj,{
+    has(target,key){
+        console.log('has')
+        return Reflect.has(target,key)
+    }
+})
+effect(()=>{
+    console.log('foo' in p)
+})
+```
+##### for in
+
+在对`for in`的处理是，简单来说是一个`generator`函数，但是在内部，是通过`Reflect.ownKeys`来获取所有的`key`，然后通过`Reflect.get`来获取对应的值，从而实现`for in`的代理。所以就可以通过重写`ownKeys`拦截`for in`的操作。
+```js
+const obj = {foo:1}
+// 使用`Symbol`来收集依赖
+const INERATE_KEY =Symbol()
+const p = new Proxy(obj,{
+    ownKeys(target){
+        track(target,INERATE_KEY)
+        return Reflect.ownKeys(target)
+    }
+})
+```
+使用`Symbol`来收集依赖，是因为在`for in`的`ownKeys`是不能那倒对应的`key`，所以也无法进行绑定，故使用`Symbol`来进行绑定。
+但是这样会有一些问题，例如新增属性。
+考虑下面代码
+```js
+// 有一个effect，使用了forin进行遍历
+effect(()=>{
+    for(let key in p){
+        console.log(key)
+    }
+})
+// 修改p对象的值
+p.bar = 2
+```
+在修改p对象的值时，触发`set`，进行对应的`effect`执行，但是，在`for in`进行收集的时候，使用的`key`是`INERATE_KEY`。所以，在`trigger`中，就会出现问题，因为`INERATE_KEY`和`bar`是不一样的，所以就不会触发`effect`的执行。所以，需要在`trigger`中，进行`INERATE_KEY`的收集，从而实现`effect`的执行。
+修改`trigger`函数
+```js
+function trigger(target, key) {
+    const depsMap = bucket.get(target) // target Map
+    if (!depsMap) return;
+    const effects = depsMap.get(key) // effectFn Set
+    const iterateEffects = depsMap.get(ITERATE_KEY) // iterateEffects Set
+
+    const effectToRun = new Set()
+    effects && effects.forEach(effectFn => { // 增加守卫条件
+        if (effectFn !== activeEffect) { // trigger触发执行的副作用函数如果和当前正在执行的副作用函数一样，就不触发执行
+            effectToRun.add(effectFn)
+        }
+    })
+
+        iterateEffects && iterateEffects.forEach(fn => { // 将iterate相关的副作用函数也添加到effectToRun
+            if (fn !== activeEffect) {
+                effectToRun.add(fn)
+            }
+        })
+
+
+    effectToRun && effectToRun.forEach(fn => {
+        if (fn.options.scheduler) { // 该副作用函数选项options中的调度器函数存在
+            fn.options.scheduler(fn)
+        } else { // 如果不存在scheduler调度函数，则直接调用副作用函数
+            fn()
+        }
+    })
+}
+```
+但是，这样也会出现问题，在`for in`中，修改值的变化，只会被对应的`key`的`effect`收集，而不会被`INERATE_KEY`的`effect`收集，`INERATE_KEY`的收集只会在影响`forin`的结果的时候，也就是在`obj`新增的时候。
+解决思路就是区分新增和修改：`add`和`set`。
+```js
+const obj = new Proxy(data, {
+    set(target, p, value, receiver) {
+        const type = Object.prototype.hasOwnProperty.call(target, p) ? 'SET' : 'ADD' // 如果target没这个属性，track中为SET操作，否则为ADD操作
+        const res = Reflect.set(...arguments)
+        trigger(target, p, type) // 把副作用函数取出并执行
+        return res
+    },
+})
+// trigger函数
+function trigger(target, key, type) {
+    const depsMap = bucket.get(target) // target Map
+    if (!depsMap) return;
+    const effects = depsMap.get(key) // effectFn Set
+    const iterateEffects = depsMap.get(ITERATE_KEY) // iterateEffects Set
+
+    const effectToRun = new Set()
+    effects && effects.forEach(effectFn => { // 增加守卫条件
+        if (effectFn !== activeEffect) { // trigger触发执行的副作用函数如果和当前正在执行的副作用函数一样，就不触发执行
+            effectToRun.add(effectFn)
+        }
+    })
+    // 如果操作是添加操作，才将iterate_key相关联的副作用函数取出执行
+    if (type === 'ADD') {
+        iterateEffects && iterateEffects.forEach(fn => { // 将iterate相关的副作用函数也添加到effectToRun
+            if (fn !== activeEffect) {
+                effectToRun.add(fn)
+            }
+        })
+    }
+
+    effectToRun && effectToRun.forEach(fn => {
+        if (fn.options.scheduler) { // 该副作用函数选项options中的调度器函数存在
+            fn.options.scheduler(fn)
+        } else { // 如果不存在scheduler调度函数，则直接调用副作用函数
+            fn()
+        }
+    })
+}
+```
+简单来说就是在`set`中，区分`add`和`set`，然后在`trigger`中，区分`add`和`set`，从而实现`for in`的代理。
+##### delete
+在`delete`的时候，对应的是`[[delete]]`，在`Proxy`中，对应的就是`deleteProperty`。
+```js
+const obj = new Proxy(data, {
+    deleteProperty(target, p) { // 拦截delete操作, delete操作也会影响for in 循环，所以传递DELETE参数到trigger函数
+        const hasKey = Object.prototype.hasOwnProperty.call(target, p) // 测试target是否有这个property
+        const res = Reflect.deleteProperty(target, p)
+        if (hasKey && res) { // 删除成功且target有这个key
+            trigger(target, p, 'DELETE')
+        }
+        return res
+    }
+})
+// trigger函数
+function trigger(target, key, type) {
+  const depsMap = bucket.get(target) // target Map
+  if (!depsMap) return;
+  const effects = depsMap.get(key) // effectFn Set
+  const iterateEffects = depsMap.get(ITERATE_KEY) // iterateEffects Set
+
+  const effectToRun = new Set()
+  effects && effects.forEach(effectFn => { // 增加守卫条件
+    if (effectFn !== activeEffect) { // trigger触发执行的副作用函数如果和当前正在执行的副作用函数一样，就不触发执行
+      effectToRun.add(effectFn)
+    }
+  })
+  // 如果操作是添加操作，才将iterate_key相关联的副作用函数取出执行
+  if (type === 'ADD' || type === 'DELETE') {
+    iterateEffects && iterateEffects.forEach(fn => { // 将iterate相关的副作用函数也添加到effectToRun
+      if (fn !== activeEffect) {
+        effectToRun.add(fn)
+      }
+    })
+  }
+
+  effectToRun && effectToRun.forEach(fn => {
+    if (fn.options.scheduler) { // 该副作用函数选项options中的调度器函数存在
+      fn.options.scheduler(fn)
+    } else { // 如果不存在scheduler调度函数，则直接调用副作用函数
+      fn()
+    }
+  })
+}
+```
+这里，需要注意的是，`delete`的时候，需要判断是否删除成功，如果删除成功，才会触发`effect`的执行。因为`delete`操作也会影响`for in`循环，所以传递`DELETE`参数到`trigger`函数。
+#### 5.4 合理的触发响应
+主要是优化响应式的边界，例如相等，继承，等等，这些都不需要触发响应。给出老师的代码吧。感觉不需要太过了解。
+```js
+
+let activeEffect,// 当前被激活的副作用函数
+    effectStack = [], // 副作用函数栈
+    jobQueue = new Set() // 任务队列,通过Set自动去重相同的副作用函数
+
+const bucket = new WeakMap() // 副作用函数的桶 使用WeakMap
+const ITERATE_KEY = Symbol('iterate key')
+const p = Promise.resolve() // 使用promise实例将任务添加到微任务队列
+
+let isFlushing = false // 是否正在刷新队列
+function flushJob() {
+    if (isFlushing) return // 如果正在刷新，则什么也不做
+    isFlushing = true // 正在刷新
+    p.then(() => { // 将副作用函数的执行放到微任务队列中
+        jobQueue.forEach(effectFn => effectFn()) // 取出任务队列中的所有副作用函数执行
+    }).finally(() => {
+        isFlushing = false // 重置刷新标志
+    })
+}
+
+function effect(fn, options = {}) {
+    const effectFn = () => {
+        // 副作用函数执行之前，将该函数从其所在的依赖集合中删除
+        cleanup(effectFn)
+        // 当effectFn执行时，将其设置为当前激活的副作用函数
+        activeEffect = effectFn
+        effectStack.push(activeEffect) // 将当前副作用函数推进栈
+        const res = fn() // lazy选项，getter函数，执行的结果res
+        // 当前副作用函数结束后，将此函数推出栈顶，并将activeEffect指向栈顶的副作用函数
+        // 这样：响应式数据就只会收集直接读取其值的副作用函数作为依赖
+        effectStack.pop()
+        activeEffect = effectStack[effectStack.length - 1]
+        return res;// 将函数的结果传递出去，配合lazy选项
+    }
+    effectFn.deps = [] // activeEffect.deps用来存储所有与该副作用函数相关联的依赖集合
+    effectFn.options = options // 将用户传进来的options挂载到副作用函数effectFn上
+    if (options.lazy) { // lazy的话就把副作用函数返回出去
+        return effectFn
+    } else { // 否则就立即执行该副作用函数
+        effectFn()
+    }
+}
+
+function cleanup(effectFn) {
+    for (let i = 0, len = effectFn.deps.length; i < len; i++) {
+        let deps = effectFn.deps[i] // 依赖集合
+        deps.delete(effectFn)
+    }
+    effectFn.deps.length = 0 // 重置effectFn的deps数组
+}
+
+
+
+// track函数
+function track(target, key) {
+    if (!activeEffect) return // 没有正在执行的副作用函数 直接返回
+    let depsMap = bucket.get(target)
+    if (!depsMap) { // 不存在，则创建一个Map
+        bucket.set(target, depsMap = new Map())
+    }
+    let deps = depsMap.get(key) // 根据key得到 depsSet(set类型), 里面存放了该 target-->key 对应的副作用函数
+    if (!deps) { // 不存在，则创建一个Set
+        depsMap.set(key, (deps = new Set()))
+    }
+    deps.add(activeEffect) // 将副作用函数加进去
+    // deps就是当前副作用函数存在联系的依赖集合
+    // 将其添加到activeEffect.deps数组中
+    activeEffect.deps.push(deps)
+}
+
+// trigger函数
+function trigger(target, key, type) {
+    const depsMap = bucket.get(target) // target Map
+    if (!depsMap) return;
+    const effects = depsMap.get(key) // effectFn Set
+    const iterateEffects = depsMap.get(ITERATE_KEY) // iterateEffects Set
+
+    const effectToRun = new Set()
+    effects && effects.forEach(effectFn => { // 增加守卫条件
+        if (effectFn !== activeEffect) { // trigger触发执行的副作用函数如果和当前正在执行的副作用函数一样，就不触发执行
+            effectToRun.add(effectFn)
+        }
+    })
+    // 如果操作是添加操作，才将iterate_key相关联的副作用函数取出执行
+    if (type === 'ADD' || type === 'DELETE') {
+        iterateEffects && iterateEffects.forEach(fn => { // 将iterate相关的副作用函数也添加到effectToRun
+            if (fn !== activeEffect) {
+                effectToRun.add(fn)
+            }
+        })
+    }
+
+    effectToRun && effectToRun.forEach(fn => {
+        if (fn.options.scheduler) { // 该副作用函数选项options中的调度器函数存在
+            fn.options.scheduler(fn)
+        } else { // 如果不存在scheduler调度函数，则直接调用副作用函数
+            fn()
+        }
+    })
+}
+
+// 对new Proxy的一层封装
+function reactive(obj) {
+    return new Proxy(obj, {
+        get(target, p, receiver) {
+            if (p === 'raw') { // proxy.raw可以取得他的代理对象target
+                return target
+            }
+            track(target, p)
+            return Reflect.get(...arguments)
+        },
+        set(target, p, value, receiver) {
+            const oldValue = target[p] // 新旧值对比，不同才更新
+            const type = Object.prototype.hasOwnProperty.call(target, p) ? 'SET' : 'ADD' // 如果target没这个属性，track中为SET操作，否则为ADD操作
+            const res = Reflect.set(...arguments)
+            if (receiver.raw === target) { // receiver是被代理对象target的proxy,才继续执行更新
+                if (oldValue !== value && (!Number.isNaN(oldValue) || !Number.isNaN(value))) { // 新旧值对比, 且新旧值 不都是 NaN, 才执行更新
+                    trigger(target, p, type) // 把副作用函数取出并执行
+                }
+            }
+            return res
+        },
+        has(target, p) { // 拦截 in 操作符, in操作符内部最终调用了对象的[[HasProperty]]内部方法，该内部方法可以被Proxy的has拦截函数拦截
+            track(target, p)
+            return Reflect.has(target, p)
+        },
+        ownKeys(target) { // 拦截 for in 循环，只有target参数
+            track(target, ITERATE_KEY)
+            return Reflect.ownKeys(target)
+        },
+        deleteProperty(target, p) { // 拦截delete操作, delete操作也会影响for in 循环，所以传递DELETE参数到trigger函数
+            const hasKey = Object.prototype.hasOwnProperty.call(target, p) // 测试target是否有这个property
+            const res = Reflect.deleteProperty(target, p)
+            if (hasKey && res) { // 删除成功且target有这个key
+                trigger(target, p, 'DELETE')
+            }
+            return res
+        }
+    })
+}
+
+const obj = {},
+    proto = {bar: 1},
+    child = reactive(obj),
+    parent = reactive(proto)
+// 使用parent作为child的原型
+Object.setPrototypeOf(child, parent)
+// child.raw === obj, parent.raw === proto
+
+effect(() => {
+    console.log('effect~')
+    console.log(child.bar)
+})
+child.bar++
+
+```
+#### 5.5 浅响应和深响应
+上面实现的都是浅响应，即只有在第一层的时候，才会进行响应式的处理，而在深层的时候，不会进行响应式的处理。例如：
+```js
+const obj = reactive({
+    foo: {
+        bar: 1
+    }
+})
+effect(() => {
+    console.log(obj.foo.bar)
+})
+obj.foo.bar++
+
+```
+在`obj.foo.bar`变化时，是不能触发响应的。可以通过递归的方式，来实现深响应。
+```js
+function reactive(obj){
+  return new Proxy(obj,{
+      get(target,key,receiver){
+        // proxy.raw可以取得他的代理对象target
+            if(key === 'raw'){
+                return target
+            }
+            track(target,key)
+            const res = Reflect.get(target,key,receiver)
+            return typeof res === 'object' && res !== null ? reactive(res) : res
+        },
+      
+  }) 
+}
+```
+封装`createReactive`，来抽象出`reactive`的实现。
+```js
+
+function createReactive(obj,isShallow = false) {
+  return new Proxy(obj, {
+    get(target, p, receiver) {
+      if (p === 'raw') { // proxy.raw可以取得他的代理对象target
+        return target
+      }
+      const res = Reflect.get(target, p, receiver)
+      track(target, p)
+      if (isShallow) return res
+      return typeof res === 'object' && res !== null ? reactive(res) : res
+    },
+    set(target, p, value, receiver) {
+      const oldValue = target[p] // 新旧值对比，不同才更新
+      const type = Object.prototype.hasOwnProperty.call(target, p) ? 'SET' : 'ADD' // 如果target没这个属性，track中为SET操作，否则为ADD操作
+      const res = Reflect.set(...arguments)
+      if (receiver.raw === target) { // receiver是被代理对象target的proxy,才继续执行更新
+        if (oldValue !== value && (!Number.isNaN(oldValue) || !Number.isNaN(value))) { // 新旧值对比, 且新旧值 不都是 NaN, 才执行更新
+          trigger(target, p, type) // 把副作用函数取出并执行
+        }
+      }
+      return res
+    },
+    has(target, p) { // 拦截 in 操作符, in操作符内部最终调用了对象的[[HasProperty]]内部方法，该内部方法可以被Proxy的has拦截函数拦截
+      track(target, p)
+      return Reflect.has(target, p)
+    },
+    ownKeys(target) { // 拦截 for in 循环，只有target参数
+      track(target, ITERATE_KEY)
+      return Reflect.ownKeys(target)
+    },
+    deleteProperty(target, p) { // 拦截delete操作, delete操作也会影响for in 循环，所以传递DELETE参数到trigger函数
+      const hasKey = Object.prototype.hasOwnProperty.call(target, p) // 测试target是否有这个property
+      const res = Reflect.deleteProperty(target, p)
+      if (hasKey && res) { // 删除成功且target有这个key
+        trigger(target, p, 'DELETE')
+      }
+      return res
+    }
+  })
+}
+function reactive(obj){
+    return createReactive(obj)
+}
+function shallowReactive(obj){
+    return createReactive(obj,true)
+}
+```
+#### 5.6 只读和浅只读
+只读的实现，就是在`set`中，进行判断，如果是只读的话，就不进行`set`、`delete`的操作。
+#### 5.7 代理数组
+##### 5.7.1 数组的索引和`length`
+在原有的`Proxy`中，在修改的原有`index`也是有响应式的，但是在增加的时候是不会的。下面是解决`set`的代码
+```js
+function createReactive(obj,isShallow = false,isReadonly = false){
+    return new Proxy(obj,{
+        set(target,key,newVal,receiver){
+            if(isReadonly){
+                console.warn(`属性:${key} 是只读属性`)
+                return true
+            }
+            const oldValue = target[key]
+            // 如果属性不存在，说明是新增属性
+            const type = Array.isArray(target) ? Number(key) < target.length ? 'SET' : 'ADD' : Object.prototype.hasOwnProperty.call(target, key) ? 'SET' : 'ADD'
+            const res = Reflect.set(target,key,newVal,receiver)
+            if(receiver.raw === target){
+                if(oldValue !== newVal && (!Number.isNaN(oldValue) || !Number.isNaN(newVal))){
+                    trigger(target,key,type)
+                }
+            }
+            return res
+          
+        }
+    })
+}
+```
+但是，如果通过修改length来修改数组的长度，并不是任何时候都需要触发响应的，如果实在`length`为10的时候，将`length`修改成100，那么是不会影响前10个元素的；同理，如果原数组有100个元素，那么将`length`修改成50，那么后面的元素是需要响应的，前面的元素也是没有影响的。所以需要修改`set`：
+```js
+function createReactive(obj,isShallow = false,isReadonly = false){
+    return new Proxy(obj,{
+        set(target,key,newVal,receiver){
+            if(isReadonly){
+                console.warn(`属性:${key} 是只读属性`)
+                return true
+            }
+            const oldValue = target[key]
+            // 如果属性不存在，说明是新增属性
+            const type = Array.isArray(target) ? Number(key) < target.length ? 'SET' : 'ADD' : Object.prototype.hasOwnProperty.call(target, key) ? 'SET' : 'ADD'
+            const res = Reflect.set(target,key,newVal,receiver)
+            if(receiver.raw === target){
+                if(oldValue !== newVal && (!Number.isNaN(oldValue) || !Number.isNaN(newVal))){
+                    // 增加第四个参数，即触发响应的新值
+                    trigger(target,key,type,newVal)
+                }
+            }
+            return res
+          
+        }
+    })
+}
+// trigger函数
+function trigger(target,key,type,newVal){
+    const depsMap = bucket.get(target) // target Map
+  if(!depsMap) return;
+  // 略
+  if(Array.isArray(target) && key === 'length'){
+      // 对于索引大于或等于新的length的元素
+    //需要吧所有相关联的副作用函数取出来执行
+    depsMap.forEach((effects,key)=>{
+        if(key >= newVal){
+            effects.forEach(effectFn=>{
+                if(effectFn !== activeEffect){
+                    effectToRun.add(effectFn)
+                }
+            })
+        }
+    })
+    
+    effectsToRun.forEach(fn=>{
+        if(fn.options.scheduler){
+            fn.options.scheduler(fn)
+        }else{
+            fn()
+        }
+    })
+  }
+}
+
+```
+
+##### 5.7.2 遍历数组
+###### `forin`
+在遍历数组的时候，会使用`for in`，但是`for in`是不能遍历数组的，所以需要修改`ownKeys`。
+```js
+function createReactive(obj,isShallow = false,isReadonly = false){
+    return new Proxy(obj,{
+        ownKeys(target){
+            track(target,Array.isArray(target) ? 'length' : ITERATE_KEY))
+            return Reflect.ownKeys(target)
+        }
+    })
+}
+```
+###### `forof`
+`forof`遍历的内部方法使用的是，`[[Symbol.iterator]]`,返回的是一个迭代器，所以需要修改`get`。
+```js
+// 数组迭代器模拟
+const arr = [1,2,3]
+arr[Symbol.iterator]() = function(){
+    let index = 0
+    let len = arr.length
+    return {
+        next(){
+            return {
+                value: index < len ? arr[index++] : undefined,
+                done:index < len ? false : true 
+            }
+        }
+    }
+}
+function createReactive(obj,isShallow = false,isReadonly=false){
+    return new Proxy(obj,{
+        get(target,key,reveiver){
+            if(key === 'raw'){
+                return target
+            }
+            if(!isReadonly && typeof key !== 'symbol'){
+                track(target,key)
+            }
+            const res = Reflect.get(target,key,reveiver)
+            if(isShallow){
+                return res
+            }
+            if(typeof res === 'object' && res !== null){
+                return isReadonly ? readonly(res) : reactive(res)
+            }
+            return  res
+        }
+    })
+}
+```
+##### 5.7.3 数组的查找方法
+数组的内部方法其实都是依赖对象的基础方法，所以在大多数情况下，都是不需要做特殊处理，但是也有一些特殊情况(`includes,indexOf,lastIndexOf`)：
+```js
+// `includes`
+const obj = {}
+const arr = reactive([obj])
+console.log(arr.includes(arr[0])) // false
+```
+这里应该是`true`，但是没有出现预期的结果，原因也是因为，在`includes`中，会使用代理对象的`index`进行访问，但是在`get`中，会在对象的访问时，进行依赖收集，而访问的属性是对象的时候，会进行递归的响应式处理，但是在这个时候`reactive`返回的代理对象其实已经不是相同的代理对象，所以解决思路就是保持代理对象的一致性，可以在创建的时候代理对象桶里查询是否有这个代理对象，避免相同的代理对象创建，导致出现问题。
+```js
+// 定义一个WeakMap实例，存储原始对象到代理对象的映射
+const proxyMap = new WeakMap()
+function reactive(obj){
+    // 优先在proxyMap中查找是否有该对象的代理对象
+  const existProxy = proxyMap.get(obj)
+  if(existProxy) return existProxy
+    const proxy = createReactive(obj)
+    // 将原始对象和代理对象存储到proxyMap中
+    proxyMap.set(obj,proxy)
+    return proxy
+  
+}
+```
+这里解决了，代理对象不一致的问题，但是，还有如下问题：
+```js
+const obj = {}
+const arr = reactive([obj])
+console.log(arr.includes(obj)) // false
+```
+这里是原始对象和代理对象不一致的问题。解决方案：重写原有的`includes`
+```js
+const arrayInstrumentations = {};
+
+['includes','indexOf','lastIndexOf'].forEach((method)=>{
+    const originMethod = Array.prototype[method]
+    arrayInstrumentations[method] = (key,target) => {
+      // 优先在proxyMap中查找是否有该对象的代理对象
+      const existProxy = proxyMap.get(target)
+      if (existProxy) {
+        target = existProxy
+      } else {
+        target =  target.raw
+      }
+      return target.includes(value)
+    }
+})
+
+function createReactive(obj, isShallow = false, isReadonly = false) {
+    return new Proxy(obj, {
+        get(target, key, reveiver) {
+            if (key === 'raw') {
+                return target
+            }
+            // 如果操作的是数组，同时key存在与arrayInstrumentations中，就执行arrayInstrumentations中的方法
+            if (Array.isArray(target) && key in arrayInstrumentations) {
+                return Reflect.get(arrayInstrumentations, key, reveiver)
+            }
+            if (!isReadonly && typeof key !== 'symbol') {
+                track(target, key)
+            }
+            const res = Reflect.get(target, key, reveiver)
+            if (isShallow) {
+                return res
+            }
+            if (typeof res === 'object' && res !== null) {
+                return isReadonly ? readonly(res) : reactive(res)
+            }
+            return res
+        },
+    })
+}
+
+```
+解决的逻辑就是，如果在响应式数据中，没有找到，那就在在原始数据中查找，`target.raw`指向的是原始数据。
+##### 5.7.4 隐式修改数组长度的原型方法
+除了直接修改或者添加属性的方式来修改`length`触发响应式。还有一些方法会修改原始数据的`length`，例如`pop`、`push`、`shift`、`unshift`、`splice`。这些方法都是通过修改原始数据的`length`来实现的，所以也需要进行响应式的处理。
+
+```js
+const arr = reactive([])
+effect(()=>{
+    arr.push(1)
+})
+effect(()=>{
+    arr.push(2)
+})
+
+```
+以`push`为例，上面的代码会出现栈溢出的问题，因为在`push`的时候，会触发`effect`的执行，而在`effect`的执行中，又会触发`push`的执行，从而导致栈溢出。所以需要在`trigger`中，进行判断，如果是`push`的话，就不进行`effect`的执行（原因就是push操作会隐形的对`length`，进行`set`和`get`）。
+解决如下：
+```js
+let shouldTrack = true // 是否需要收集依赖
+;['push','pop','shift','unshift','splice'].forEach(method=>{
+    const originMethod = Array.prototype[method]
+    arrayInstrumentations[method] = function(...args){
+        shouldTrack = false // 不需要收集依赖
+        const res = originMethod.apply(this,args)
+        shouldTrack = true // 重置为true
+        return res
+    }
+})
+
+```
+#### 5.8 代理set和map
+这里跳过，只探究响应式的原理，不探究具体的实现。
+
