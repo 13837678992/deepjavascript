@@ -1466,3 +1466,139 @@ let shouldTrack = true // 是否需要收集依赖
 #### 5.8 代理set和map
 这里跳过，只探究响应式的原理，不探究具体的实现。
 
+### 第6章 原始值的响应方案
+#### 6.1 引入`ref`
+因为原始值的变化并不是修改，而是替换，重新赋值的结果，所以不能够进行拦截操作。所以需要引入`ref`(使用非原始值进行包裹解决)，来进行响应式的处理。
+
+```js
+function ref(value){
+  const wrapper = {
+    value,
+  }
+    return reactive(wrapper)
+}
+
+const refVal = ref(1)
+effect(()=>{
+    console.log(refVal.value)
+})
+refVal.value++
+```
+这样是可以进行响应式处理的，但是出现，原始值和对象的判断问题：
+```js
+const refVal1 = ref(1)
+const refVal2 = reactive({value:1})
+```
+这两个的区别就是，`refVal1`是原始值，`refVal2`是对象。所以需要进行判断。
+```js
+function ref(value){
+  const wrapper = {
+    value,
+  }
+  Object.defineProperty(wrapper,'__v_isRef',{
+    value:true
+  })
+    return reactive(wrapper)
+  }
+    return reactive(wrapper)
+}
+```
+
+#### 6.2 响应丢失问题
+
+```js
+export default {
+    setup(){
+        const obj = reactive({
+            foo:1,
+            bar:2,
+        })
+        setTimeout(()=>{
+            obj.foo++
+        },1000)
+        return {
+            obj
+        }
+      return {
+            ...obj
+      }
+    }
+}
+
+<template>
+  <p>
+    {{foo}}/
+    {{bar}}
+  </p>
+</template>
+```
+这里的定时器触发的数据不会有响应式，原因是，`setup`函数返回的是一个新的对象，而不是`obj`，需要解决的就是：即使通过普通对象也能访问响应式对象，所以需要修改`reactive`。
+```js
+const obj = reactive({
+    foo:1,
+    bar:2,
+})
+const newObj = {
+    foo:{
+        get value(){
+            return obj.foo
+        },
+        
+    },
+    bar:{
+        get value(){
+            return obj.bar
+        }
+    }
+}
+effect(()=>{
+    console.log(newObj.foo.value)
+})
+obj.foo = 100
+```
+`get`的结构就是一种包装，吧这种包装提取出来。
+```js
+function toRef(obj,key){
+    const wrapper = {
+      __v_isRef:true,
+      get value(){
+        return obj[key]
+      },
+      set value(newVal){
+        obj[key] = newVal
+      }
+    }
+    return wrapper
+}
+
+function toRefs (obj){
+    const ret = {}
+    for(const key in obj){
+            ret[key] = toRef(obj,key)
+    }
+    return ret
+}
+```
+#### 6.3 自动脱ref
+上面的解决原始值的方式，很明显，是不够优雅的，只能通过`value`访问，添加了一层额外的操作，所以需要解决的就是，自动脱`ref`(就是直接访问`ref`属性，不需要通过`value`)。
+```js
+function proxyRefs (target){
+    return new Proxy(target,{
+        get(target,key,receiver){
+            const value = Reflect.get(target,key,receiver)
+            return value.__v_isRef ? value.value : value 
+        },
+        set(target,key,newValue,receive){
+            const value = Reflect.get(target,key,receive)
+            if(value.__v_isRef){
+                value.value = newValue
+              return true
+              
+            }
+            return Reflect.set(target,key,newValue,receive)
+    })
+}
+// 使用
+const newObj = proxyRefs({...toRefs(obj)})
+```
+实际上在vue的组件中，`setup`实际上就是一个`proxyRefs`的过程，所以可以直接使用`setup`返回的对象。
