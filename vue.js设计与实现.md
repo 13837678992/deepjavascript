@@ -1602,3 +1602,98 @@ function proxyRefs (target){
 const newObj = proxyRefs({...toRefs(obj)})
 ```
 实际上在vue的组件中，`setup`实际上就是一个`proxyRefs`的过程，所以可以直接使用`setup`返回的对象。
+## 第三篇 渲染器的设计
+### 第7章 渲染器的设计
+渲染器的实现是框架的重点，类似`Transition`、`Teleport`、`Suspense`等组件，以及`templat`和自定义指令等等都是通过渲染器来实现的。
+#### 7.3 自定义渲染器
+```js
+const vnode = {
+    type:'h1',
+    children:'hello world',
+}
+const renderer = createRenderer()
+renderer.render(vnode,document.getElementById('app'))
+
+function  createRenderer(){
+    function patch(n1,n2,container) {
+        // 如果n1不存在，说明是挂载    
+        if (n1 == null) {
+            mountElement(n2, container)
+
+        }else{
+            // 更新
+            patchElement(n1,n2,container)
+        }
+    }    
+    function mountElement(){
+      // 挂载函数
+      function mountElement(vnode, container) {
+        const el = createElement(vnode.type)
+        if (typeof vnode.children === 'string') {
+          el.textContent = vnode.children
+        }
+        container.appendChild(el)
+      }
+        
+    }
+    function render(vnode,container){
+        if(vnode){
+            patch(container._vnode,vnode,container)
+        }else{
+            // 没有vnode，卸载
+          if (container._vnode) {
+           // container.innerHTML = ''
+            unmount(container._vnode, null)
+          }
+          
+        }
+        container._vnode = vnode
+    }
+    return {
+        render
+    }
+}
+```
+上面的简易的渲染器，但是使用了浏览器的api，但是这个不利于跨平台，所以需要抽象出来，所以可以提供对应`api`的配置项，用来解决适配的问题。
+```js
+const renderer = createRenderer({
+    createElement(type){
+        return document.createElement(type)
+    },
+    insert(child,parent,anchor = null){
+        parent.insertBefore(child,anchor)
+    },
+    remove(child){
+        const parent = child.parentNode
+        if(parent){
+            parent.removeChild(child)
+        }
+    },
+    setElementText(el,text){
+        el.textContent = text
+    },
+    createText(text){
+        return document.createTextNode(text)
+    }
+})
+
+function createRenderer(options){
+    const {
+        createElement,
+        insert,
+        setElementText,
+    } = options
+  function mountElement(vnode,container){
+        
+  }
+  function patch(n1,n2,container){
+        
+  }
+  function render(vnode,container){
+  }
+    return {
+        render
+    }
+  
+}
+```
