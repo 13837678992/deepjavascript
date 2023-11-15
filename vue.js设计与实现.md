@@ -1697,3 +1697,580 @@ function createRenderer(options){
   
 }
 ```
+### 第8章 挂载与更新
+#### 8.1 挂载子节点和元素的更新
+```js
+const vnode = {
+    type:'h1',
+    children:[
+        {
+            type:'p',
+            children:'hello world'
+        },
+    ],
+}
+function mountElement(vnode,container){
+    const el = createElement(vnode.type)
+    if (typeof vnode.children === 'string') {
+        setElementText(el, vnode.children)
+    }else if(Array.isArray(vnode.children)){
+       vnode.children.forEach(child=>{
+           // 挂载阶段没有n1(旧的dom)
+           patch(null,child,el) 
+       })
+    }
+    insert(el,container)
+}
+```
+使用`props`对虚拟dom元素的属性进行描述，
+```js
+const vnode  ={
+    type:'h1',
+    props:{
+        id:'foo',
+        style:{
+            color:'red'
+        }
+    },
+    children:[
+        {
+            type:'p',
+            children:'hello world'
+        },
+    ],
+}
+
+function  mountElement(vnode,container){
+    const el = createElement(vnode.type)
+    // 处理props
+    const {props} = vnode
+    if (props){
+        for(const key in props){
+            const val = props[key]
+            if(key.startsWith('on')){
+                // 事件
+                const event = key.slice(2).toLowerCase()
+                el.addEventListener(event,val)
+            }else{
+                // 其他属性
+                // el.setAttribute(key,val)
+                el[key] = val
+            }
+        }
+    }
+    insert(el,container)
+}
+```
+对于只在dom上设置属性和使用`attributes`，下面探讨下
+#### 8.2 HTML Attributes 与 DOM Properties
++ HTML Attributes
+- **定义**：HTML 属性是在 HTML 文档或页面中定义的。它们提供了关于 HTML 元素的初始信息。
+- **语法**：在 HTML 标记中直接定义，例如：`<input type="text" value="Hello">`。
+- **不变性**：HTML 属性的值不会因为用户交互而改变。即使用户在页面上进行了修改（例如，更改了文本框的内容），HTML 中的 `value` 属性还是显示原始值。
+- **访问方式**：可以通过 JavaScript 中的 `getAttribute` 和 `setAttribute` 方法来获取和设置。
+
++ DOM Properties
+- **定义**：当浏览器解析 HTML 并创建文档对象模型（DOM）时，它会基于 HTML 属性创建对应的 DOM 属性。
+- **动态性**：DOM 属性是动态的。它们可以被 JavaScript 修改，并且会反映元素的当前状态。
+- **访问方式**：可以直接通过 JavaScript 访问和修改，例如：`element.value = 'New Value'`。
+
+- 但是`HTML Attributes` 与 `DOM Properties`还是有差别的
+
+```js
+<div class="foo"></div>
+```
+
+`class = "foo"`对应的`DOM Properties`是`el.className`，而不是`el.class`，因为`class`是`JavaScript`的保留字，所以不能使用`el.class`，但是`HTML Attributes`是可以的。
+ ```js
+ <div aria-valuenow="75"></div>
+ ```
+`aria-*`类的`HTML Attributes`就没有与之对应的`DOM Properties`，所以需要使用`getAttribute`和`setAttribute`来进行访问和修改。
+可以这样理解，`HTML Attributes`就是初始值，`DOM Properties`就是当前值，所以`DOM Properties`的值是可以被修改的（同时可以拿到最新值），而`HTML Attributes`的值是不可以被修改的。
+
+#### 8.3 正确地设置元素属性
+由于`HTML Attributes`和`DOM Properties`的差别，所以这些工作就需要框架来解决，例如`disabled`他的`HTML Attributes`是`disabled`，而`DOM Properties`是`true`或者`false`，所以需要框架来解决这些问题。
+```js
+function mountElement(vnode,container){
+    const el = createElement(vnode.type)
+    if(vnode.props){
+        for(const key in vnode.props){
+            if(key in el){
+                const type = typeof el[key]
+                const value = vnode.props[key]
+                if (type === 'boolean' && value === ''){
+                    el[key] = true
+                }else{
+                    el[key] = value
+                }
+            }else{
+                el.setAttribute(key,vnode.props[key])
+            }
+        }
+    }
+    insert(el,container)
+}
+
+```
+#### 8.4 class的处理
+```js
+// 指定 class 为一个字符串值。
+<div class="foo bar"></div>
+const vnode = {
+    type:'div',
+    props:{
+        class:'foo bar'
+    }
+}
+// 指定 class 为一个对象。
+<div :class="{ foo:true,bar:false }"></div>
+const vnode = {
+    type:'div',
+    props:{
+        class:{
+            foo:true,
+            bar:false
+        }
+    }
+}
+// 指定 class 为一个数组,包含上述两种。
+<div :class="arr"></div>
+const arr = ['foo bar',{
+    baz:true
+}]
+const vnode = {
+    type:'div',
+    props:{
+        class:['foo bar',{
+            baz:true
+        }]
+    }
+}
+
+```
+同时对class的设置，有三种方式：`el.className`、`el.classList`、`el.setAttribute('class','')`。性能最好的是`el.className`（数据来自当前书籍），但是`el.className`只能设置字符串，所以需要对`el.className`进行封装。
+```js
+const renderer = createRenderer({
+    patchProp(el,key,prev,next){
+        if(key === 'class') {
+            el.className = next || ''
+        } else if (shouldSetAsProp(el,key,next)){
+            const type = typeof  el[key]
+            if(type === 'boolean' && next === ''){
+                    el[key] = true
+                }else {
+                    el[key] = next
+            
+            }
+        } else {
+            el.setAttribute(key,next)
+        }
+    }
+})
+```
+#### 8.5 卸载操作
+之前是通过`innerHTML =''`来进行卸载操作，但是这样会**导致**:
++ 容器的内容可能由多个组件渲染，当卸载发生时，应该执行这些组件的`beforeUnmount`、`unmounted`等生命周期，
++ 即使内容不是由组件渲染的，有的元素存在自定义指令，应该在卸载时执行对应的指令钩子函数，
++ 使用`innerHTML`清空容器的另一个缺陷是，它不会移除绑定在dom元素上的事件处理函数。
+```js
+function mountElement(vnode,container){
+    // 虚拟dom和真实dom建立映射关系
+    const el = vnode.el = createElement(vnode.type)
+    const {props,children} = vnode
+    if(typeof children === 'string'){
+        setElementText(el,children)
+    } else if (Array.isArray(children)){
+        mountChildren(children,el)
+    }
+    if(props){
+        for(const key in props){
+            patchProps(el,key,null,props[key])
+        }
+    }
+    insert(el,container))
+}
+
+function render (vnode,container){
+    if(vnode){
+        patch(container._vnode,vnode,container)
+    }else{
+        // 没有vnode，卸载
+        unmount(container._vnode)
+    }
+    container._vnode = vnode
+}
+function unmount(vnode){
+  const parent = vnode.parentNode
+  if(parent){
+    if(parent) parent.removeChild(vnode)
+  }
+}
+```
+
+
+#### 8.6 区分vnode的类型
+更新dom是在`type`相同，属性不同时进行更新。
+```js
+function patch (n1,n2,container){
+    // 如果新旧dom不同，卸载旧的dom
+    if(n1 && n1.type !== n2.type){
+        unmount(n1)
+        n1 = null 
+    }
+    if(!n1){
+        mountElement(n2,container)
+    } else {
+      // 更新
+      
+    }
+}
+```
+
+#### 8.7 事件的处理
+在处理事件的时候，主要是使用`addEventlistener`来添加；
+在更新时，除了使用`removeEventListener`来移除，然后添加的方式，还可以通过，伪造一个事件处理函数`invoker`，通过修改`invoker.value`的值来更新事件处理函数。
+```js
+patchProps(el,key,prevValue,nextValue){
+    
+    if(/^on/.test(key)){
+        const invokers = el._vei || (el._vei = {})
+        let invoker = invokers[key]
+        const name = key.slice(2).toLowerCase()
+            if(nextValue) {
+                if (!invoker) {
+                    invoker = invokers[key] = (e) => {
+                        invoker.value(e)
+                    }
+                }
+                invoker.value = nextValue
+                el.addEventListener(name, invoker)
+            } else if(invoker){
+                el.removeEventListener(name, invoker)
+                el._vei = null
+            }  
+        
+    } else if(key === 'class'){
+        
+    } else if(shoudSetAsProp(el,key,nextValue)){
+        
+    } else {
+        el.setAttribute(key,nextValue)
+    }
+}
+```
+但是在`addEventlistener`绑定事件处理函数，是可以同时绑定多个的，所以需要对`invoker`和`props`进行处理。
+```js
+const vnode  = {
+    type:'div',
+    props:{
+        onClick:[
+        ()=>{
+            alert('click1')
+        },
+        ()=>{
+            alert('click2')
+        }
+        ]
+    },
+    children:[
+        {
+            type:'p',
+            children:'hello world'
+        },
+    ],
+}
+patchProps(el,key,prevValue,nextValue){
+    if(/^on/.test(key)){
+        const invokers = el._vei || (el._vei = {})
+        let invoker = invokers[key]
+        const name = key.slice(2).toLowerCase()
+        if(nextValue) {
+            if (!invoker) {
+                invoker = invokers[key] = (e) => {
+                    if (Array.isArray(invoker.value)) {
+                        invoker.value.forEach(fn => fn(e))
+                    } else {
+                        invoker.value(e)
+                    }
+                }
+            }
+            invoker.value = nextValue
+            el.addEventListener(name, invoker)
+        } else if(invoker){
+            el.removeEventListener(name, invoker)
+            el._vei = null
+        }
+  
+    } else if(key === 'class'){
+  
+    } else if(shoudSetAsProp(el,key,nextValue)){
+  
+    } else {
+        el.setAttribute(key,nextValue)
+    }
+}
+
+```
+
+#### 8.8 事件冒泡与更新时机问题
+为了更好的描述，这里构造一个例子：
+```js
+const {effect,ref} = VueReactivity
+const bol = ref(false)
+effect(()=>{
+    const vnode = {
+        type:'div',
+        props:bol.value ? {
+            onClick:()=>{
+                alert('父元素click')
+            }
+        } : {},
+        children:[
+            {
+                type:'p',
+                props:{
+                    onClick:()=>{
+                        bol.value = true
+                    }
+                },
+                
+                children:'hello world'
+            },
+        ],
+    }
+})
+renderer.render(vnode,document.getElementById('app'))
+```
+上述代码在首次渲染完成之后，由于 `bol.value` 的值 为 `false`，所以渲染器并不会为 `div` 元素绑定点击事件。当用鼠标点击 `p` 元素时，即使 `click` 事件可以从 `p` 元素冒泡到父级 `div` 元素， 但由于 `div` 元素没有绑定 `click` 事件的事件处理函数，所以什么都不会发生。但事实是，当你尝试运行上面这段代码并点击 `p` 元素时，会 发现父级 `div` 元素的 `click` 事件的事件处理函数竟然执行了。为什么 会发生如此奇怪的现象呢？这其实与更新机制有关，我们来分析一下 当点击 `p` 元素时，到底发生了什么。
+当点击 `p` 元素时，绑定到它身上的 `click` 事件处理函数会执行， 于是 `bol.value` 的值被改为 `true`。接下来的一步非常关键，由于 `bol` 是一个响应式数据，所以当它的值发生变化时，会触发副作用函数重新执行。由于此时的 `bol.value` 已经变成了 `true`，所以在更新阶段，渲染器会为父级 `div` 元素绑定 `click` 事件处理函数。当更新完成之后，点击事件才从 `p` 元素冒泡到父级 `div` 元素。由于此时 `div` 元素已经绑定了 `click` 事件的处理函数，因此就发生了上述奇怪的现象
+解决方案：所有事件绑定的时间晚于触发事件的时间，都是不予执行的。
+
+```js
+patchProps(el,key,prevValue,nextValue){
+    if(/^on/.test(key)){
+        const invokers = el._vei || (el._vei = {})
+        let invoker = invokers[key]
+        const name = key.slice(2).toLowerCase()
+        if(nextValue) {
+            if (!invoker) {
+                invoker = invokers[key] = (e) => {
+                    if(e.timeStamp < invoker.attached) return
+                    if (Array.isArray(invoker.value)) {
+                        invoker.value.forEach(fn => fn(e))
+                    } else {
+                        invoker.value(e)
+                    }
+                }
+            }
+            invoker.value = nextValue
+            invoker.attached = performance.now()
+            el.addEventListener(name, invoker)
+        } else if(invoker){
+            el.removeEventListener(name, invoker)
+            el._vei = null
+        }
+  
+    } else if(key === 'class'){
+  
+    } else if(shoudSetAsProp(el,key,nextValue)){
+  
+    } else {
+        el.setAttribute(key,nextValue)
+    }
+}
+
+
+```
+#### 8.9 更新子节点
+一共是9种情况：['','文本',[]]*['','文本',[]]。
+```js
+// 更新函数
+function patchElement(oldVNode, newVNode) {
+    const el = newVNode.el = oldVNode.el, 
+        oldProps = oldVNode.props, 
+        newProps = newVNode.props
+    // 更新Props
+    for (const key in newProps) {
+        if (newProps[key] !== oldProps[key]) {
+             patchProps(el, key, oldProps[key], newProps[key])
+        }
+    }
+    for (const key in oldProps) {
+        if (!(key in newProps)) {
+             patchProps(el, key, oldProps[key], null)
+        }
+    }
+    // 更新子节点
+    patchChildren(oldVNode, newVNode, el)
+}
+function patchChildren(oldVNode, newVNode, container) {
+  // 判断新子节点的类型是否是文本类型
+  if (typeof newVNode.children === 'string') {
+    // 旧子节点的类型只有三种： 无子节点， 文本子节点， 组合子节点
+    if (Array.isArray(oldVNode.children)) {
+      oldVNode.children.forEach(child => unmounted(child))
+    }
+    setElementText(container, newVNode.children)
+  }else if (Array.isArray(newVNode.children)) { // 新子节点的类型是一组子节点
+    if (Array.isArray(oldVNode.children)) { // 旧子节点的类型是一组节点
+      // 核心Diff算法比较两个VNode子节点的区别
+      // 此处是简单实现，并非Diff算法
+      oldVNode.children.forEach(child => unmounted(child))
+      newVNode.children.forEach(child => patch(null, child, container))
+    }else {
+      // 此时，旧子节点的类型要么是文本类型，要么是无
+      // 但无论那种情况，都需要将容器清空，然后将新的一组子节点逐个挂载
+      setElementText(container, '')
+      newVNode.children.forEach(child => {
+        patch(null, child, container)
+      })
+    }
+  }else { // newVNode.children === null或者'' 没有新子节点，
+    if (Array.isArray(oldVNode.children)) { // 旧子节点是一组节点 就逐个卸载
+      oldVNode.children.forEach(child => unmounted(child))
+    } else if (typeof oldVNode.children === 'string') { // 旧子节点是文本节点，就清空内容
+      setElementText(container, '')
+    }
+  }
+}
+
+// 补丁函数
+function patch(oldVNode, newVNode, container) {
+  // oldVNode存在，新旧vnode的type不同
+  if (oldVNode && oldVNode.type !== newVNode.type) {
+    unmounted(oldVNode)
+    oldVNode = null
+  }
+  // 代码运行到这说明oldVNode和newVNode的type是相同的
+  const {type} = newVNode
+  // newVNode type是string, 说明是普通标签元素. 如果type是object，则描述的是组件
+  if (typeof type === 'string') {
+    if (!oldVNode) {
+      // 挂载
+      mountElement(newVNode, container)
+    } else {
+      patchElement(oldVNode, newVNode)
+    }
+  }else if (typeof type === 'object'){
+    // 组件类型的VNode
+  }else if (type === 'xxx'){
+    // 其他类型的VNode
+  }
+
+}
+
+// 卸载函数
+function unmounted(vnode) {
+  const parent = vnode.el.parentNode
+  if (parent) parent.removeChild(vnode.el)
+}
+
+```
+
+#### 8.10 文本节点和注释节点
+
+```js
+    const Text = Symbol('text') // 文本类型Symbol
+    const Comment = Symbol('comment') // 注释类型Symbol
+    const newVnode = {
+        type: Text,
+        children: '这是文本节点'
+    }
+    const oldVnode = {
+        type: Comment,
+        children: '这是注释'
+    }
+function patch(oldVNode, newVNode, container) {
+  // oldVNode存在，新旧vnode的type不同
+  if (oldVNode && oldVNode.type !== newVNode.type) {
+    unmounted(oldVNode)
+    oldVNode = null
+  }
+  // 代码运行到这说明oldVNode和newVNode的type是相同的
+  const {type} = newVNode
+  // newVNode type是string, 说明是普通标签元素. 如果type是object，则描述的是组件
+  if (typeof type === 'string') {
+    if (!oldVNode) {
+      // 挂载
+      mountElement(newVNode, container)
+    } else {
+      patchElement(oldVNode, newVNode)
+    }
+  }else if (typeof type === 'object'){
+    // 组件类型的VNode
+  }else if (type === Text){
+    // 文本类型的VNode
+    if (!oldVNode) {
+      // 挂载. 调用createText创建文本节点
+      const el = newVNode.el = createText(newVNode.children)
+      // 将文本节点插入容器中
+      insert(el, container)
+    }else {
+      // 更新
+      const el = newVNode.el = oldVNode.el
+      if (newVNode.children !== oldVNode.children) {
+        setText(el, newVNode.children)
+      }
+    }
+  }else if (type === Comment) {
+    // 注释类型的VNode
+  }
+
+}
+
+```
+
+#### 8.11 Fragment
+就是`<></>`，也是口头的空节点，在`react` 和`vue3`都有这个，这个是不会渲染的，只是用来包裹的，所以需要对`Fragment`进行处理。
+```js
+// 虚拟节点
+const vnode = {
+    type:Fragment,
+    children:[
+        {
+            type:'p',
+            children:'hello world'
+        },
+        {
+            type:'p',
+            children:'hello world'
+        },
+    ]
+}
+function patch(oldVNode, newVNode, container) {
+    // oldVNode存在，新旧vnode的type不同
+    
+    if (oldVNode && oldVNode.type !== newVNode.type) {
+        unmounted(oldVNode)
+        oldVNode = null
+    }
+    // 代码运行到这说明oldVNode和newVNode的type是相同的
+    const {type} = newVNode
+  
+    // 开始判断vnode的type
+    if (typeof type === 'string') { // 普通标签类型的VNode.
+        if (!oldVNode) mountElement(newVNode, container) // 挂载
+        else patchElement(oldVNode, newVNode) // 更新
+    } else if (typeof type === 'object') {// 组件类型的VNode 省略代码
+    } else if (type === Text) { // 文本类型的VNode 省略代码
+    } else if (type === Comment) { // 注释类型的VNode 省略代码
+    } else if (type === Fragment) { // 片断类型的VNode
+        if (!oldVNode) { // 旧vnode不存在，直接通过fragment的children逐一挂载
+            newVNode.children.forEach(vnode => patch(null, vnode, container))
+        } else { // 旧vnode存在，更新fragment的children
+            patchChildren(oldVNode, newVNode, container)
+        }
+    }
+
+}
+// 卸载函数
+function unmounted(vnode) {
+    // 卸载如果是fragment,则卸载其children
+    if (vnode.type === Fragment) {
+        vnode.children.forEach(c => unmounted(c))
+        return
+    }
+    const parent = vnode.el.parentNode
+    if (parent) parent.removeChild(vnode.el)
+}
+```
