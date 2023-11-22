@@ -2954,4 +2954,21 @@ while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
     }
 }
 ```
+### 第 11 章 快速diff算法
+#### 11.1 相同的前置元素和后置元素
+不同于简单 Diff 算法和双端 Diff 算法，快速 Diff 算法包含预处理 步骤，这其实是借鉴了纯文本 Diff 算法的思路。在纯文本 Diff 算法 中，存在对两段文本进行预处理的过程。例如，在对两段文本进行 Diff 之前，可以先对它们进行全等比较：
+```js
+if (text1 === text2) return
+```
+这也称为快捷路径。如果两段文本全等，那么就无须进入核心 Diff 算法的步骤了。除此之外，预处理过程还会处理两段文本相同的 前缀和后缀。假设有如下两段文本：
+```text
+TEXT1: I use vue for app development
+TEXT2: I use react for app development
+```
+对于内容相同的问题，是不需要进行核心 Diff 操作的。因此，对于 TEXT1 和 TEXT2 来说，真正需要进行 Diff 操作的部分是：
+```text
+TEXT1: use
+TEXT2: react 
+```
+
 
