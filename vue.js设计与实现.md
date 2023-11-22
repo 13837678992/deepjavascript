@@ -2781,3 +2781,177 @@ function patchChildren(n1,n2,container){
     }
 }
 ```
+### 第 10 章 双端diff算法
+#### 10.1 双端diff算法的原理
+简单的对dom的移动等，并不是最优的解决方案。
+例如这个dom
+![图10-1](./img/vue/9-12.png)
+图 10-1 新旧两组子节点及索引
+如果是按照之前的方式，p-1和p-2都会进行移动，这样就会导致，性能的浪费。
+![图10-2](./img/vue/10-2.png)
+图 10-2 两次 DOM 移动操作完成更新
+![图10-3](./img/vue/10-3.png)
+图 10-3 把真实 DOM 节点 p-3 移动到真实 DOM 节点 p-1 前面
+在理论上，只需要一次的操作就可以解决这个dom变化的变更。所以就需要双端diff算法。
+顾名思义，双端 Diff 算法是一种同时对新旧两组子节点的两个端 点进行比较的算法。因此，我们需要四个索引值，分别指向新旧两组 子节点的端点，如图 10-4 所示。
+![图10-4](./img/vue/10-4.png)  
+图 10-4 四个索引值，分别指向新旧两组子节点的端点
+```js
+function patchChildren(n1,n2,container){
+    if (typeof n2.children === 'string'){
+        // ...
+    } else if (Array.isArray(n2.children)){
+        patchKeyedChildren(n1,n2,container)
+    } else {
+        // ...
+    }
+}
+function patchKeyedChildren(n1,n2,container){
+    const oldChildren = n1.children,
+        newChildren = n2.children;
+    // 4个索引
+    let oldStartIdx = 0,
+        oldEndIdx = oldChildren.length - 1,
+        newStartIdx = 0,
+        newEndIdx = newChildren.length - 1;
+    // 4个vnode节点
+    let oldStartVNode = oldChildren[0],
+        oldEndVNode = oldChildren[oldEndIdx],
+        newStartVNode = newChildren[0],
+        newEndVNode = newChildren[newEndIdx];
+}
+
+```
+![图10-5](./img/vue/10-5.png)
+图 10-5 双端比较的方式
+在双端比较中，每一轮比较都分为四个步骤，如图 10-5 中的连线所示。
++ 第一步：比较旧的一组子节点中的第一个子节点 p-1 与新的一组子节点中的第一个子节点 p-4，看看它们是否相同。由于两者的 `key` 值不同，因此不相同，不可复用，于是什么都不做。
++ 第二步：比较旧的一组子节点中的最后一个子节点 p-4 与新的一组子节点中的最后一个子节点 p-3，看看它们是否相同。由于两 者的 `key` 值不同，因此不相同，不可复用，于是什么都不做。
++ 第三步：比较旧的一组子节点中的第一个子节点 p-1 与新的一组子节点中的最后一个子节点 p-3，看看它们是否相同。由于两者 的 `key` 值不同，因此不相同，不可复用，于是什么都不做。
++ 第四步：比较旧的一组子节点中的最后一个子节点 p-4 与新的一组子节点中的第一个子节点 p-4。由于它们的 `key` 值相同，因此 可以进行 `DOM` 复用。
+对于`key`相同的dom，可以进行移动复用相同的dom。
+```js
+function patchKeyedChildren(n1,n2,container){
+    const oldChildren = n1.children,
+        newChildren = n2.children;
+    // 4个索引
+    let oldStartIdx = 0,
+        oldEndIdx = oldChildren.length - 1,
+        newStartIdx = 0,
+        newEndIdx = newChildren.length - 1;
+    // 4个vnode节点
+    let oldStartVNode = oldChildren[0],
+        oldEndVNode = oldChildren[oldEndIdx],
+        newStartVNode = newChildren[0],
+        newEndVNode = newChildren[newEndIdx];
+    if (oldStartVNode.key === newStartVNode.key){
+        // 第一步 ： oldStartVNode 和 newStartVNode 比较
+    } else if (oldEndVNode.key === newEndVNode.key){
+        // 第二步 ： oldEndVNode 和 newEndVNode 比较
+    } else if (oldStartVNode.key === newEndVNode.key){
+        // 第三步 ： oldStartVNode 和 newEndVNode 比较
+    } else if (oldEndVNode.key === newStartVNode.key){
+        // 第四步 ： oldEndVNode 和 newStartVNode 比较
+        patch(oldEndVNode,newStartVNode,container) 
+        // 移动
+        insert(oldEndVNode.el,container,newStartVNode.el)
+        // 移动完成之后，需要更新索引
+        oldEndVNode = oldChildren[--oldEndIdx]
+          newStartVNode = newChildren[++newStartIdx]
+    }
+}
+```
+![图10-6](./img/vue/10-6.png)
+图 10-6 新旧两组子节点以及真实 DOM 节点的状态
+这次变更之后，后续的如下：
+![图10-7](./img/vue/10-7.png)
+图 10-7 新旧两组子节点以及真实 DOM 节点的状态
+这是一次的对比算法，对于多个节点，直接循环对比。
+```js
+while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+  if (oldStartVNode.key === newStartVNode.key){
+    // 第一步 ： oldStartVNode 和 newStartVNode 比较
+  } else if (oldEndVNode.key === newEndVNode.key){
+    // 第二步 ： oldEndVNode 和 newEndVNode 比较
+  } else if (oldStartVNode.key === newEndVNode.key){
+    // 第三步 ： oldStartVNode 和 newEndVNode 比较
+  } else if (oldEndVNode.key === newStartVNode.key){
+    // 第四步 ： oldEndVNode 和 newStartVNode 比较
+    patch(oldEndVNode,newStartVNode,container)
+    // 移动
+    insert(oldEndVNode.el,container,newStartVNode.el)
+    // 移动完成之后，需要更新索引
+    oldEndVNode = oldChildren[--oldEndIdx]
+    newStartVNode = newChildren[++newStartIdx]
+  }
+}
+```
+#### 10.2 双端对比的优势
+双端对比算法的优势在于，它可以在一次循环中完成所有的对比操作，而不需要像之前的算法那样，需要进行多次循环。这样就可以减少循环的次数，提高性能。
+#### 10.3 非理想情况的处理方式
+考虑如下的的场景：
+![图10-17](./img/vue/10-17.png)
+图 10-17 第一轮比较都无法命中
+在四个步骤的比较过程中，都无法找到可复用的节点，只能通过增加额外的处理步骤来处理这种非理想情 况。既然两个头部和两个尾部的四个节点中都没有可复用的节点，那么我们就尝试看看非头部、非尾部的节点能否复用。具体做法是，拿新的一组子节点中的头部节点去旧的一组子节点中寻找，如下面的代码所示：
+```js
+while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+    if(!oldStartVNode){
+        oldStartVNode = oldChildren[++oldStartIdx]
+    } else if(!oldEndVNode) {
+        oldEndVNode = oldChildren[--oldEndIdx]
+    } else if (oldStartVNode.key === newStartVNode.key){
+      // 第一步 ： oldStartVNode 和 newStartVNode 比较
+    } else if (oldEndVNode.key === newEndVNode.key){
+      // 第二步 ： oldEndVNode 和 newEndVNode 比较
+    } else if (oldStartVNode.key === newEndVNode.key){
+      // 第三步 ： oldStartVNode 和 newEndVNode 比较
+    } else if (oldEndVNode.key === newStartVNode.key){
+      // 第四步 ： oldEndVNode 和 newStartVNode 比较
+    } else {
+        const idxInOld = oldChildren.findIndex(node => node.key === newStartVNode.key)
+             if(idxInOld >= 0) {
+                 const vnodeToMove = oldChildren[idxInOld]
+                 patch(vnodeToMove, newStartVNode, container)
+                 insert(vnodeToMove.el, container, oldStartVNode.el)
+                 oldChildren[idxInOld] = undefined
+                 newStartVNode = newChildren[++newStartIdx]
+             }
+    }
+}
+```
+
+#### 10.4 添加新元素
+之前是dom的更新，如果是新增元素的话：
+![图10-25](./img/vue/10-25.png)
+图 10-25 新增节点的情况
+再进行双端diff算法的时候，就会出现问题，因为在双端diff算法中，是以旧的dom为基准的，所以在旧的dom中，是没有对应的key的，所以就会出现问题。
+```js
+while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+    if(!oldStartVNode){
+        oldStartVNode = oldChildren[++oldStartIdx]
+    } else if(!oldEndVNode) {
+        oldEndVNode = oldChildren[--oldEndIdx]
+    } else if (oldStartVNode.key === newStartVNode.key){
+      // 第一步 ： oldStartVNode 和 newStartVNode 比较
+    } else if (oldEndVNode.key === newEndVNode.key){
+      // 第二步 ： oldEndVNode 和 newEndVNode 比较
+    } else if (oldStartVNode.key === newEndVNode.key){
+      // 第三步 ： oldStartVNode 和 newEndVNode 比较
+    } else if (oldEndVNode.key === newStartVNode.key){
+      // 第四步 ： oldEndVNode 和 newStartVNode 比较
+    } else {
+        const idxInOld = oldChildren.findIndex(node => node.key === newStartVNode.key)
+             if(idxInOld >= 0) {
+                 const vnodeToMove = oldChildren[idxInOld]
+                 patch(vnodeToMove, newStartVNode, container)
+                 insert(vnodeToMove.el, container, oldStartVNode.el)
+                 oldChildren[idxInOld] = undefined
+             } else {
+                patch(null, newStartVNode, container, oldStartVNode.el)
+             }
+        newStartVNode = newChildren[++newStartIdx]
+             
+    }
+}
+```
+
