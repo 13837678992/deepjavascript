@@ -2577,19 +2577,19 @@ const newVNode = {
     { type: 'p', children: '6', key: 2 },
   ],
 }
-
 ```
-上面的两个虚拟dom具有相同 `key`，但是顺序不同，如果按照之前的方式，就会进行删除和添加，但是这样就会导致，`dom`的复用，所以需要对比 `key`，如果 `key` 相同，就不需要进行删除和添加，只需要进行移动就可以了。
+
+上面的两个虚拟 dom 具有相同 `key`，但是顺序不同，如果按照之前的方式，就会进行删除和添加，但是这样就会导致，`dom`的复用，所以需要对比 `key`，如果 `key` 相同，就不需要进行删除和添加，只需要进行移动就可以了。
 在 `children` 是一个数组的时候，进行新旧 `dom` 的对比，如果 `key` 相同，就不需要进行删除和添加，只需要进行移动就可以了。
+
 ```js
-function patchChildren(n1,n2,container){
-  if(typeof n2.children === 'string'){
-      
-  } else if (Array.isArray(n2.children)){
-      const oldChildren = n1.children,
-        newChildren = n2.children;
+function patchChildren(n1, n2, container) {
+  if (typeof n2.children === 'string') {
+  } else if (Array.isArray(n2.children)) {
+    const oldChildren = n1.children,
+      newChildren = n2.children
     for (var i = 0; i < newChildren.length; i++) {
-        const newChild = newChildren[i]
+      const newChild = newChildren[i]
       for (var j = 0; j < oldChildren.length; j++) {
         const oldChild = oldChildren[j]
         if (newChild.key === oldChild.key) {
@@ -2599,376 +2599,1155 @@ function patchChildren(n1,n2,container){
       }
     }
   } else {
-      
   }
 }
 ```
+
 #### 9.3 找到需要移动的元素
+
 如图：
 ![图一](./img/vue/9-3-1.png)
-在新的dom中，p-3 找到了，对应的索引是2，p-1的索引是0，那么说明，新的dom ，p-1需要移动，在旧的dom中，p-1在p-3的前面；而在新的dom中，p-1在p-3的后面，说明p-1需要移动到p-3的后面。
+在新的 dom 中，p-3 找到了，对应的索引是 2，p-1 的索引是 0，那么说明，新的 dom ，p-1 需要移动，在旧的 dom 中，p-1 在 p-3 的前面；而在新的 dom 中，p-1 在 p-3 的后面，说明 p-1 需要移动到 p-3 的后面。
 使用`lastIndex`作为寻找过程中，遇到的最大的索引。代码如下：
-```js
-function patchChildren(n1,n2,container){
-    if (typeof n2.children === 'string'){
-        //
-    }else if(Array.isArray(n2.children)){
-        const oldChildren = n1.children,
-        newChildren = n2.children;
-        let lastIndex = 0
-        for (let i = 0; i < newChildren.length; i++) {
-            const newChild = newChildren[i]
-            for (var j = 0; j < oldChildren.length; j++) {
-                const oldChild = oldChildren[j]
-                if (newChild.key === oldChild.key) {
-                    patch(oldChild, newChild, container)
-                    if(j < lastIndex){
-                        // 需要移动
-                        break
-                    }else{
-                        lastIndex = j
-                    }
-                    break
-                }
-            }
-        }
-    }else{
-        
-    }
-}
 
+```js
+function patchChildren(n1, n2, container) {
+  if (typeof n2.children === 'string') {
+    //
+  } else if (Array.isArray(n2.children)) {
+    const oldChildren = n1.children,
+      newChildren = n2.children
+    let lastIndex = 0
+    for (let i = 0; i < newChildren.length; i++) {
+      const newChild = newChildren[i]
+      for (var j = 0; j < oldChildren.length; j++) {
+        const oldChild = oldChildren[j]
+        if (newChild.key === oldChild.key) {
+          patch(oldChild, newChild, container)
+          if (j < lastIndex) {
+            // 需要移动
+            break
+          } else {
+            lastIndex = j
+          }
+          break
+        }
+      }
+    }
+  } else {
+  }
+}
 ```
+
 #### 9.4 如何移动元素
+
 如图：
 ![图一](./img/vue/9-3-1.png)
 它的更新步骤如下。
-+ 第一步：取新的一组子节点中第一个节点 p-3，它的 `key` 为 3， 尝试在旧的一组子节点中找到具有相同 `key` 值的可复用节点。发现能够找到，并且该节点在旧的一组子节点中的索引为 2。此时变 量 `lastIndex` 的值为 0，索引 2 不小于 0，所以节点 p-3 对应 的真实 `DOM` 不需要移动，但需要更新变量 `lastIndex` 的值为 2。
-+ 第二步：取新的一组子节点中第二个节点 p-1，它的 `key` 为 1， 尝试在旧的一组子节点中找到具有相同 `key` 值的可复用节点。发现能够找到，并且该节点在旧的一组子节点中的索引为 0。此时变量 `lastIndex` 的值为 2，索引 0 小于 2，所以节点 p-1 对应的真实 `DOM` 需要移动。到了这一步，我们发现，节点 p-1 对应的真实 DOM 需要移动，但应该移动到哪里呢？我们知道，新`children`的顺序其实就是更新后真实`dom`节点应有的顺序，所有节点p-1在新`children`中的位置就代表了真实dom更新后的位置，由于节点p-1在新`children`中排在节点p-3后面，所以我们应该把节点p-1所对应的真实dom移动到节点p-3所对应的真实dom后面。移动后的结果如图9-10所示。可以看到，这样操作之后，此时真实dom的顺序为p-2、p-3、p-1。
-+ 第三步：取新的一组子节点中第三个节点 p-2，它的 `key` 为 2。 尝试在旧的一组子节点中找到具有相同 `key` 值的可复用节点。发 现能够找到，并且该节点在旧的一组子节点中的索引为 1。此时变 量 `lastIndex` 的值为 2，索引 1 小于 2，所以节点 p-2 对应的真实 `DOM` 需要移动。
-  
+
+- 第一步：取新的一组子节点中第一个节点 p-3，它的 `key` 为 3， 尝试在旧的一组子节点中找到具有相同 `key` 值的可复用节点。发现能够找到，并且该节点在旧的一组子节点中的索引为 2。此时变 量 `lastIndex` 的值为 0，索引 2 不小于 0，所以节点 p-3 对应 的真实 `DOM` 不需要移动，但需要更新变量 `lastIndex` 的值为 2。
+- 第二步：取新的一组子节点中第二个节点 p-1，它的 `key` 为 1， 尝试在旧的一组子节点中找到具有相同 `key` 值的可复用节点。发现能够找到，并且该节点在旧的一组子节点中的索引为 0。此时变量 `lastIndex` 的值为 2，索引 0 小于 2，所以节点 p-1 对应的真实 `DOM` 需要移动。到了这一步，我们发现，节点 p-1 对应的真实 DOM 需要移动，但应该移动到哪里呢？我们知道，新`children`的顺序其实就是更新后真实`dom`节点应有的顺序，所有节点 p-1 在新`children`中的位置就代表了真实 dom 更新后的位置，由于节点 p-1 在新`children`中排在节点 p-3 后面，所以我们应该把节点 p-1 所对应的真实 dom 移动到节点 p-3 所对应的真实 dom 后面。移动后的结果如图 9-10 所示。可以看到，这样操作之后，此时真实 dom 的顺序为 p-2、p-3、p-1。
+- 第三步：取新的一组子节点中第三个节点 p-2，它的 `key` 为 2。 尝试在旧的一组子节点中找到具有相同 `key` 值的可复用节点。发 现能够找到，并且该节点在旧的一组子节点中的索引为 1。此时变 量 `lastIndex` 的值为 2，索引 1 小于 2，所以节点 p-2 对应的真实 `DOM` 需要移动。
+
 ![图9-10](./img/vue/9-10.png)
 把节点 p-1 对应的真实 DOM 移动到节点 p-3 对应的真实 DOM 后面
 第三步与第二步类似，节点 p-2 对应的真实 `DOM` 也需要移动。 同样，由于节点 p-2 在新 `children` 中排在节点 p-1 后面，所以我 们应该把节点 p-2 对应的真实 `DOM` 移动到节点 p-1 对应的真实 DOM 后面。移动后的结果如图 9-11 所示：
 ![图9-11](./img/vue/9-11.png)
 把节点 p-2 对应的真实 DOM 移动到节点 p-1 对应的真实 DOM 后面
 代码实现：
-```js
-function patchChildren(n1,n2,container){
-    if (typeof n2.children === 'string'){
-        //
-    }else if(Array.isArray(n2.children)){
-        const oldChildren = n1.children,
-        newChildren = n2.children;
-        let lastIndex = 0
-        for (let i = 0; i < newChildren.length; i++) {
-            const newChild = newChildren[i]
-            for (var j = 0; j < oldChildren.length; j++) {
-                const oldChild = oldChildren[j]
-                if (newChild.key === oldChild.key) {
-                    patch(oldChild, newChild, container)
-                    if(j < lastIndex){
-                        // 需要移动
-                        const prevVNode = newChildren[i-1]
-                        if(prevVNode) {
-                            const anchor = prevVNode.el.nextSibling
-                            insert(newChild.el,container,anchor)
-                        }
-                    }else{
-                        lastIndex = j
-                    }
-                    break
-                }
-            }
-           
-        }
-    }else{
-        
-    }
-}
 
+```js
+function patchChildren(n1, n2, container) {
+  if (typeof n2.children === 'string') {
+    //
+  } else if (Array.isArray(n2.children)) {
+    const oldChildren = n1.children,
+      newChildren = n2.children
+    let lastIndex = 0
+    for (let i = 0; i < newChildren.length; i++) {
+      const newChild = newChildren[i]
+      for (var j = 0; j < oldChildren.length; j++) {
+        const oldChild = oldChildren[j]
+        if (newChild.key === oldChild.key) {
+          patch(oldChild, newChild, container)
+          if (j < lastIndex) {
+            // 需要移动
+            const prevVNode = newChildren[i - 1]
+            if (prevVNode) {
+              const anchor = prevVNode.el.nextSibling
+              insert(newChild.el, container, anchor)
+            }
+          } else {
+            lastIndex = j
+          }
+          break
+        }
+      }
+    }
+  } else {
+  }
+}
 ```
+
 #### 9.5 添加新元素
+
 本节我们将讨论添加新节点的情况，如图 9-12 所示：
 ![图9-12](./img/vue/9-12.png)
 图 9-12 新增节点 p-4
 首先是在新元素在`olddom`上是没有`key`对应使用，就需要在对应的`newchild`上插入当前的节点。
+
 ```js
-function patchChildren(n1,n2,container){
-    if (typeof n2.children === 'string'){
-        //
-    }else if(Array.isArray(n2.children)){
-        const oldChildren = n1.children,
-        newChildren = n2.children;
-        let lastIndex = 0
-        for (let i = 0; i < newChildren.length; i++) {
-            const newChild = newChildren[i]
-            let find = false
-            for (var j = 0; j < oldChildren.length; j++) {
-                const oldChild = oldChildren[j]
-                if (newChild.key === oldChild.key) {
-                    find = true
-                    patch(oldChild, newChild, container)
-                    if(j < lastIndex){
-                        // 需要移动
-                        const prevVNode = newChildren[i-1]
-                        if(prevVNode) {
-                            const anchor = prevVNode.el.nextSibling
-                            insert(newChild.el,container,anchor)
-                        }
-                    }else{
-                        lastIndex = j
-                    }
-                    break
-                }
+function patchChildren(n1, n2, container) {
+  if (typeof n2.children === 'string') {
+    //
+  } else if (Array.isArray(n2.children)) {
+    const oldChildren = n1.children,
+      newChildren = n2.children
+    let lastIndex = 0
+    for (let i = 0; i < newChildren.length; i++) {
+      const newChild = newChildren[i]
+      let find = false
+      for (var j = 0; j < oldChildren.length; j++) {
+        const oldChild = oldChildren[j]
+        if (newChild.key === oldChild.key) {
+          find = true
+          patch(oldChild, newChild, container)
+          if (j < lastIndex) {
+            // 需要移动
+            const prevVNode = newChildren[i - 1]
+            if (prevVNode) {
+              const anchor = prevVNode.el.nextSibling
+              insert(newChild.el, container, anchor)
             }
-            if(!find){
-                // 挂载
-                const anchor = i-1 < 0 ? oldChildren[0].el : newChildren[i-1].el.nextSibling
-                patch(null,newChild,container,anchor) // 对应的补丁没有第四个参数，修改对应的函数
-            }
+          } else {
+            lastIndex = j
+          }
+          break
         }
-    }else{
-        
+      }
+      if (!find) {
+        // 挂载
+        const anchor = i - 1 < 0 ? oldChildren[0].el : newChildren[i - 1].el.nextSibling
+        patch(null, newChild, container, anchor) // 对应的补丁没有第四个参数，修改对应的函数
+      }
     }
+  } else {
+  }
 }
-function patch(n1,n2,container,anchor){
-    // ...
-    if(typeof type === 'string'){
-        if(!n1){
-          // 挂载
-          mountElement(n2,container,anchor)
-        } else {
-          patchElement(n1,n2)
-        }
-    } else if(type === Text){
-        // ...
-    } else if(type === Comment){
-        // ...
-    } else if(type === Fragment){
-        // ...
+function patch(n1, n2, container, anchor) {
+  // ...
+  if (typeof type === 'string') {
+    if (!n1) {
+      // 挂载
+      mountElement(n2, container, anchor)
+    } else {
+      patchElement(n1, n2)
     }
-  
-}
-function mountElement(vnode,conatiner,anchor){
+  } else if (type === Text) {
     // ...
-    insert(el,container,anchor)
+  } else if (type === Comment) {
+    // ...
+  } else if (type === Fragment) {
+    // ...
+  }
+}
+function mountElement(vnode, conatiner, anchor) {
+  // ...
+  insert(el, container, anchor)
 }
 ```
+
 #### 9.6 移除不存在的属性
+
 除了新增元素，还有删除元素，类似的就是卸载元素，但是在卸载元素的时候，需要注意的是，如果是组件的话，需要执行组件的`unmounted`钩子函数，如果是普通的元素，就需要移除事件处理函数。
 解决思路就是在新`dom`渲染遍历后，再遍历旧`dom`，如果旧`dom`中的`key`在新`dom`中不存在，就需要进行卸载操作。
+
 ```js
-function patchChildren(n1,n2,container){
-    if (typeof n2.children === 'string') {
-        // ...
-    } else if (Array.isArray(n2.children)) {
-        const oldChildren = n1.children,
-          newChildren = n2.children;
-        let lastIndex = 0
-        for (let i = 0; i < newChildren.length; i++) {
-            // ...
-        }
-        for (let i = 0; i < oldChildren.length; i++) {
-            const oldVNode = oldChildren[i]
-            const find = newChildren.find(newVNode => newVNode.key === oldVNode.key)
-            if(!find){
-                // 卸载
-                unmounted(oldVNode)
-            }
-        }
-    }else {
-        // ...
+function patchChildren(n1, n2, container) {
+  if (typeof n2.children === 'string') {
+    // ...
+  } else if (Array.isArray(n2.children)) {
+    const oldChildren = n1.children,
+      newChildren = n2.children
+    let lastIndex = 0
+    for (let i = 0; i < newChildren.length; i++) {
+      // ...
     }
+    for (let i = 0; i < oldChildren.length; i++) {
+      const oldVNode = oldChildren[i]
+      const find = newChildren.find(newVNode => newVNode.key === oldVNode.key)
+      if (!find) {
+        // 卸载
+        unmounted(oldVNode)
+      }
+    }
+  } else {
+    // ...
+  }
 }
 ```
-### 第 10 章 双端diff算法
-#### 10.1 双端diff算法的原理
-简单的对dom的移动等，并不是最优的解决方案。
-例如这个dom
+
+### 第 10 章 双端 diff 算法
+
+#### 10.1 双端 diff 算法的原理
+
+简单的对 dom 的移动等，并不是最优的解决方案。
+例如这个 dom
 ![图10-1](./img/vue/9-12.png)
 图 10-1 新旧两组子节点及索引
-如果是按照之前的方式，p-1和p-2都会进行移动，这样就会导致，性能的浪费。
+如果是按照之前的方式，p-1 和 p-2 都会进行移动，这样就会导致，性能的浪费。
 ![图10-2](./img/vue/10-2.png)
 图 10-2 两次 DOM 移动操作完成更新
 ![图10-3](./img/vue/10-3.png)
 图 10-3 把真实 DOM 节点 p-3 移动到真实 DOM 节点 p-1 前面
-在理论上，只需要一次的操作就可以解决这个dom变化的变更。所以就需要双端diff算法。
+在理论上，只需要一次的操作就可以解决这个 dom 变化的变更。所以就需要双端 diff 算法。
 顾名思义，双端 Diff 算法是一种同时对新旧两组子节点的两个端 点进行比较的算法。因此，我们需要四个索引值，分别指向新旧两组 子节点的端点，如图 10-4 所示。
 ![图10-4](./img/vue/10-4.png)  
 图 10-4 四个索引值，分别指向新旧两组子节点的端点
-```js
-function patchChildren(n1,n2,container){
-    if (typeof n2.children === 'string'){
-        // ...
-    } else if (Array.isArray(n2.children)){
-        patchKeyedChildren(n1,n2,container)
-    } else {
-        // ...
-    }
-}
-function patchKeyedChildren(n1,n2,container){
-    const oldChildren = n1.children,
-        newChildren = n2.children;
-    // 4个索引
-    let oldStartIdx = 0,
-        oldEndIdx = oldChildren.length - 1,
-        newStartIdx = 0,
-        newEndIdx = newChildren.length - 1;
-    // 4个vnode节点
-    let oldStartVNode = oldChildren[0],
-        oldEndVNode = oldChildren[oldEndIdx],
-        newStartVNode = newChildren[0],
-        newEndVNode = newChildren[newEndIdx];
-}
 
+```js
+function patchChildren(n1, n2, container) {
+  if (typeof n2.children === 'string') {
+    // ...
+  } else if (Array.isArray(n2.children)) {
+    patchKeyedChildren(n1, n2, container)
+  } else {
+    // ...
+  }
+}
+function patchKeyedChildren(n1, n2, container) {
+  const oldChildren = n1.children,
+    newChildren = n2.children
+  // 4个索引
+  let oldStartIdx = 0,
+    oldEndIdx = oldChildren.length - 1,
+    newStartIdx = 0,
+    newEndIdx = newChildren.length - 1
+  // 4个vnode节点
+  let oldStartVNode = oldChildren[0],
+    oldEndVNode = oldChildren[oldEndIdx],
+    newStartVNode = newChildren[0],
+    newEndVNode = newChildren[newEndIdx]
+}
 ```
+
 ![图10-5](./img/vue/10-5.png)
 图 10-5 双端比较的方式
 在双端比较中，每一轮比较都分为四个步骤，如图 10-5 中的连线所示。
-+ 第一步：比较旧的一组子节点中的第一个子节点 p-1 与新的一组子节点中的第一个子节点 p-4，看看它们是否相同。由于两者的 `key` 值不同，因此不相同，不可复用，于是什么都不做。
-+ 第二步：比较旧的一组子节点中的最后一个子节点 p-4 与新的一组子节点中的最后一个子节点 p-3，看看它们是否相同。由于两 者的 `key` 值不同，因此不相同，不可复用，于是什么都不做。
-+ 第三步：比较旧的一组子节点中的第一个子节点 p-1 与新的一组子节点中的最后一个子节点 p-3，看看它们是否相同。由于两者 的 `key` 值不同，因此不相同，不可复用，于是什么都不做。
-+ 第四步：比较旧的一组子节点中的最后一个子节点 p-4 与新的一组子节点中的第一个子节点 p-4。由于它们的 `key` 值相同，因此 可以进行 `DOM` 复用。
-对于`key`相同的dom，可以进行移动复用相同的dom。
+
+- 第一步：比较旧的一组子节点中的第一个子节点 p-1 与新的一组子节点中的第一个子节点 p-4，看看它们是否相同。由于两者的 `key` 值不同，因此不相同，不可复用，于是什么都不做。
+- 第二步：比较旧的一组子节点中的最后一个子节点 p-4 与新的一组子节点中的最后一个子节点 p-3，看看它们是否相同。由于两 者的 `key` 值不同，因此不相同，不可复用，于是什么都不做。
+- 第三步：比较旧的一组子节点中的第一个子节点 p-1 与新的一组子节点中的最后一个子节点 p-3，看看它们是否相同。由于两者 的 `key` 值不同，因此不相同，不可复用，于是什么都不做。
+- 第四步：比较旧的一组子节点中的最后一个子节点 p-4 与新的一组子节点中的第一个子节点 p-4。由于它们的 `key` 值相同，因此 可以进行 `DOM` 复用。
+  对于`key`相同的 dom，可以进行移动复用相同的 dom。
+
 ```js
-function patchKeyedChildren(n1,n2,container){
-    const oldChildren = n1.children,
-        newChildren = n2.children;
-    // 4个索引
-    let oldStartIdx = 0,
-        oldEndIdx = oldChildren.length - 1,
-        newStartIdx = 0,
-        newEndIdx = newChildren.length - 1;
-    // 4个vnode节点
-    let oldStartVNode = oldChildren[0],
-        oldEndVNode = oldChildren[oldEndIdx],
-        newStartVNode = newChildren[0],
-        newEndVNode = newChildren[newEndIdx];
-    if (oldStartVNode.key === newStartVNode.key){
-        // 第一步 ： oldStartVNode 和 newStartVNode 比较
-    } else if (oldEndVNode.key === newEndVNode.key){
-        // 第二步 ： oldEndVNode 和 newEndVNode 比较
-    } else if (oldStartVNode.key === newEndVNode.key){
-        // 第三步 ： oldStartVNode 和 newEndVNode 比较
-    } else if (oldEndVNode.key === newStartVNode.key){
-        // 第四步 ： oldEndVNode 和 newStartVNode 比较
-        patch(oldEndVNode,newStartVNode,container) 
-        // 移动
-        insert(oldEndVNode.el,container,newStartVNode.el)
-        // 移动完成之后，需要更新索引
-        oldEndVNode = oldChildren[--oldEndIdx]
-          newStartVNode = newChildren[++newStartIdx]
-    }
-}
-```
-![图10-6](./img/vue/10-6.png)
-图 10-6 新旧两组子节点以及真实 DOM 节点的状态
-这次变更之后，后续的如下：
-![图10-7](./img/vue/10-7.png)
-图 10-7 新旧两组子节点以及真实 DOM 节点的状态
-这是一次的对比算法，对于多个节点，直接循环对比。
-```js
-while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
-  if (oldStartVNode.key === newStartVNode.key){
+function patchKeyedChildren(n1, n2, container) {
+  const oldChildren = n1.children,
+    newChildren = n2.children
+  // 4个索引
+  let oldStartIdx = 0,
+    oldEndIdx = oldChildren.length - 1,
+    newStartIdx = 0,
+    newEndIdx = newChildren.length - 1
+  // 4个vnode节点
+  let oldStartVNode = oldChildren[0],
+    oldEndVNode = oldChildren[oldEndIdx],
+    newStartVNode = newChildren[0],
+    newEndVNode = newChildren[newEndIdx]
+  if (oldStartVNode.key === newStartVNode.key) {
     // 第一步 ： oldStartVNode 和 newStartVNode 比较
-  } else if (oldEndVNode.key === newEndVNode.key){
+  } else if (oldEndVNode.key === newEndVNode.key) {
     // 第二步 ： oldEndVNode 和 newEndVNode 比较
-  } else if (oldStartVNode.key === newEndVNode.key){
+  } else if (oldStartVNode.key === newEndVNode.key) {
     // 第三步 ： oldStartVNode 和 newEndVNode 比较
-  } else if (oldEndVNode.key === newStartVNode.key){
+  } else if (oldEndVNode.key === newStartVNode.key) {
     // 第四步 ： oldEndVNode 和 newStartVNode 比较
-    patch(oldEndVNode,newStartVNode,container)
+    patch(oldEndVNode, newStartVNode, container)
     // 移动
-    insert(oldEndVNode.el,container,newStartVNode.el)
+    insert(oldEndVNode.el, container, newStartVNode.el)
     // 移动完成之后，需要更新索引
     oldEndVNode = oldChildren[--oldEndIdx]
     newStartVNode = newChildren[++newStartIdx]
   }
 }
 ```
+
+![图10-6](./img/vue/10-6.png)
+图 10-6 新旧两组子节点以及真实 DOM 节点的状态
+这次变更之后，后续的如下：
+![图10-7](./img/vue/10-7.png)
+图 10-7 新旧两组子节点以及真实 DOM 节点的状态
+这是一次的对比算法，对于多个节点，直接循环对比。
+
+```js
+while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+  if (oldStartVNode.key === newStartVNode.key) {
+    // 第一步 ： oldStartVNode 和 newStartVNode 比较
+  } else if (oldEndVNode.key === newEndVNode.key) {
+    // 第二步 ： oldEndVNode 和 newEndVNode 比较
+  } else if (oldStartVNode.key === newEndVNode.key) {
+    // 第三步 ： oldStartVNode 和 newEndVNode 比较
+  } else if (oldEndVNode.key === newStartVNode.key) {
+    // 第四步 ： oldEndVNode 和 newStartVNode 比较
+    patch(oldEndVNode, newStartVNode, container)
+    // 移动
+    insert(oldEndVNode.el, container, newStartVNode.el)
+    // 移动完成之后，需要更新索引
+    oldEndVNode = oldChildren[--oldEndIdx]
+    newStartVNode = newChildren[++newStartIdx]
+  }
+}
+```
+
 #### 10.2 双端对比的优势
+
 双端对比算法的优势在于，它可以在一次循环中完成所有的对比操作，而不需要像之前的算法那样，需要进行多次循环。这样就可以减少循环的次数，提高性能。
+
 #### 10.3 非理想情况的处理方式
+
 考虑如下的的场景：
 ![图10-17](./img/vue/10-17.png)
 图 10-17 第一轮比较都无法命中
 在四个步骤的比较过程中，都无法找到可复用的节点，只能通过增加额外的处理步骤来处理这种非理想情 况。既然两个头部和两个尾部的四个节点中都没有可复用的节点，那么我们就尝试看看非头部、非尾部的节点能否复用。具体做法是，拿新的一组子节点中的头部节点去旧的一组子节点中寻找，如下面的代码所示：
+
 ```js
 while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
-    if(!oldStartVNode){
-        oldStartVNode = oldChildren[++oldStartIdx]
-    } else if(!oldEndVNode) {
-        oldEndVNode = oldChildren[--oldEndIdx]
-    } else if (oldStartVNode.key === newStartVNode.key){
-      // 第一步 ： oldStartVNode 和 newStartVNode 比较
-    } else if (oldEndVNode.key === newEndVNode.key){
-      // 第二步 ： oldEndVNode 和 newEndVNode 比较
-    } else if (oldStartVNode.key === newEndVNode.key){
-      // 第三步 ： oldStartVNode 和 newEndVNode 比较
-    } else if (oldEndVNode.key === newStartVNode.key){
-      // 第四步 ： oldEndVNode 和 newStartVNode 比较
-    } else {
-        const idxInOld = oldChildren.findIndex(node => node.key === newStartVNode.key)
-             if(idxInOld >= 0) {
-                 const vnodeToMove = oldChildren[idxInOld]
-                 patch(vnodeToMove, newStartVNode, container)
-                 insert(vnodeToMove.el, container, oldStartVNode.el)
-                 oldChildren[idxInOld] = undefined
-                 newStartVNode = newChildren[++newStartIdx]
-             }
+  if (!oldStartVNode) {
+    oldStartVNode = oldChildren[++oldStartIdx]
+  } else if (!oldEndVNode) {
+    oldEndVNode = oldChildren[--oldEndIdx]
+  } else if (oldStartVNode.key === newStartVNode.key) {
+    // 第一步 ： oldStartVNode 和 newStartVNode 比较
+  } else if (oldEndVNode.key === newEndVNode.key) {
+    // 第二步 ： oldEndVNode 和 newEndVNode 比较
+  } else if (oldStartVNode.key === newEndVNode.key) {
+    // 第三步 ： oldStartVNode 和 newEndVNode 比较
+  } else if (oldEndVNode.key === newStartVNode.key) {
+    // 第四步 ： oldEndVNode 和 newStartVNode 比较
+  } else {
+    const idxInOld = oldChildren.findIndex(node => node.key === newStartVNode.key)
+    if (idxInOld >= 0) {
+      const vnodeToMove = oldChildren[idxInOld]
+      patch(vnodeToMove, newStartVNode, container)
+      insert(vnodeToMove.el, container, oldStartVNode.el)
+      oldChildren[idxInOld] = undefined
+      newStartVNode = newChildren[++newStartIdx]
     }
+  }
 }
 ```
 
 #### 10.4 添加新元素
-之前是dom的更新，如果是新增元素的话：
+
+之前是 dom 的更新，如果是新增元素的话：
 ![图10-25](./img/vue/10-25.png)
 图 10-25 新增节点的情况
-再进行双端diff算法的时候，就会出现问题，因为在双端diff算法中，是以旧的dom为基准的，所以在旧的dom中，是没有对应的key的，所以就会出现问题。
+再进行双端 diff 算法的时候，就会出现问题，因为在双端 diff 算法中，是以旧的 dom 为基准的，所以在旧的 dom 中，是没有对应的 key 的，所以就会出现问题。
+
 ```js
 while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
-    if(!oldStartVNode){
-        oldStartVNode = oldChildren[++oldStartIdx]
-    } else if(!oldEndVNode) {
-        oldEndVNode = oldChildren[--oldEndIdx]
-    } else if (oldStartVNode.key === newStartVNode.key){
-      // 第一步 ： oldStartVNode 和 newStartVNode 比较
-    } else if (oldEndVNode.key === newEndVNode.key){
-      // 第二步 ： oldEndVNode 和 newEndVNode 比较
-    } else if (oldStartVNode.key === newEndVNode.key){
-      // 第三步 ： oldStartVNode 和 newEndVNode 比较
-    } else if (oldEndVNode.key === newStartVNode.key){
-      // 第四步 ： oldEndVNode 和 newStartVNode 比较
+  if (!oldStartVNode) {
+    oldStartVNode = oldChildren[++oldStartIdx]
+  } else if (!oldEndVNode) {
+    oldEndVNode = oldChildren[--oldEndIdx]
+  } else if (oldStartVNode.key === newStartVNode.key) {
+    // 第一步 ： oldStartVNode 和 newStartVNode 比较
+  } else if (oldEndVNode.key === newEndVNode.key) {
+    // 第二步 ： oldEndVNode 和 newEndVNode 比较
+  } else if (oldStartVNode.key === newEndVNode.key) {
+    // 第三步 ： oldStartVNode 和 newEndVNode 比较
+  } else if (oldEndVNode.key === newStartVNode.key) {
+    // 第四步 ： oldEndVNode 和 newStartVNode 比较
+  } else {
+    const idxInOld = oldChildren.findIndex(node => node.key === newStartVNode.key)
+    if (idxInOld >= 0) {
+      const vnodeToMove = oldChildren[idxInOld]
+      patch(vnodeToMove, newStartVNode, container)
+      insert(vnodeToMove.el, container, oldStartVNode.el)
+      oldChildren[idxInOld] = undefined
     } else {
-        const idxInOld = oldChildren.findIndex(node => node.key === newStartVNode.key)
-             if(idxInOld >= 0) {
-                 const vnodeToMove = oldChildren[idxInOld]
-                 patch(vnodeToMove, newStartVNode, container)
-                 insert(vnodeToMove.el, container, oldStartVNode.el)
-                 oldChildren[idxInOld] = undefined
-             } else {
-                patch(null, newStartVNode, container, oldStartVNode.el)
-             }
-        newStartVNode = newChildren[++newStartIdx]
-             
+      patch(null, newStartVNode, container, oldStartVNode.el)
     }
+    newStartVNode = newChildren[++newStartIdx]
+  }
 }
 ```
-### 第 11 章 快速diff算法
+
+### 第 11 章 快速 diff 算法
+
 #### 11.1 相同的前置元素和后置元素
+
 不同于简单 Diff 算法和双端 Diff 算法，快速 Diff 算法包含预处理 步骤，这其实是借鉴了纯文本 Diff 算法的思路。在纯文本 Diff 算法 中，存在对两段文本进行预处理的过程。例如，在对两段文本进行 Diff 之前，可以先对它们进行全等比较：
+
 ```js
 if (text1 === text2) return
 ```
+
 这也称为快捷路径。如果两段文本全等，那么就无须进入核心 Diff 算法的步骤了。除此之外，预处理过程还会处理两段文本相同的 前缀和后缀。假设有如下两段文本：
+
 ```text
 TEXT1: I use vue for app development
 TEXT2: I use react for app development
 ```
+
 对于内容相同的问题，是不需要进行核心 Diff 操作的。因此，对于 TEXT1 和 TEXT2 来说，真正需要进行 Diff 操作的部分是：
+
 ```text
 TEXT1: use
-TEXT2: react 
+TEXT2: react
 ```
 
+## 第四篇 组件化
 
+### 第 12 章 组件的实现原理
+
+#### 12.1 渲染组件
+
+组件的渲染，就是将组件的虚拟 dom 渲染成真实的 dom，然后插入到容器中，判断组件就是虚拟 dom 的 type 的类型，如果是`object`就是一个组件。
+
+```js
+function patch(n1, n2, container, anchor) {
+  if (n1 && n1.type !== n2.type) {
+    unmount(n1)
+    n1 = null
+  }
+  const { type } = n2
+  // ...
+  // 开始判断vnode的type
+  if (typeof type === 'string') {
+    // 普通标签类型的VNode.
+  } else if (type === Text) {
+    // ...
+  } else if (type === Comment) {
+    // ...
+  } else if (type === Fragment) {
+    // ...
+  } else if (typeof type === 'object') {
+    // 组件类型的VNode
+    if (!n1) {
+      mountComponent(n2, container, anchor)
+    } else {
+      patchComponent(n1, n2, anchor)
+    }
+  }
+}
+```
+
+实际上，组件本身是对页面内容的封装，它用来描述页面内容的一部分。因此，一个组 件必须包含一个渲染函数，即 `render` 函数，并且渲染函数的返回值应该是虚拟 DOM。换句话说，组件的渲染函数就是用来描述组件所渲染内容的接口，
+
+```js
+const MyComponent = {
+  render() {
+    return {
+      type: 'div',
+      children: 'hello world',
+    }
+  },
+}
+```
+
+这是一个最简单的组件示例。有了基本的组件结构之后，渲染器 就可以完成组件的渲染，如下面的代码所示：
+
+```js
+const CompVNode = {
+  type: MyComponent,
+  props: {
+    name: 'jack',
+  },
+}
+renderer.render(CompVNode, document.getElementById('app'))
+```
+
+渲染器中真正完成组件渲染任务的是 `mountComponent` 函数， 其具体实现如下所示：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  // 1. 解析组件的选项
+  const componentOptions = vnode.type
+  const { render } = componentOptions
+  const subTree = render()
+  patch(null, subTree, container, anchor)
+}
+```
+
+#### 12.2 组件状态和自更新
+
+渲染组件，就是初始化挂载组件，现在是为组件设计自身的状态：
+
+```js
+const MyComponent = {
+  name: 'MyComponent',
+  data() {
+    return {
+      count: 0,
+    }
+  },
+  render() {
+    return {
+      type: 'div',
+      children: [
+        {
+          type: 'button',
+          props: {
+            onClick: () => {
+              this.count++
+            },
+          },
+          children: 'count is: ' + this.count,
+        },
+      ],
+    }
+  },
+}
+```
+
+在上面这段代码中，我们约定用户必须使用 data 函数来定义组 件自身的状态，同时可以在渲染函数中通过 this 访问由 data 函数返 回的状态数据。
+
+下面的代码实现了组件自身状态的初始化：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  const { render, data } = vnode.type
+  const stata = reactive(data())
+  const subTree = render.call(stata, stata)
+  patch(null, subTree, container, anchor)
+}
+```
+
+当组件自身状态发生变化时，我们需要有能力触发组件更新，即 组件的自更新。为此，我们需要将整个渲染任务包装到一个 effect 中，如下面的代码所示：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  const { render, data } = vnode.type
+  const stata = reactive(data())
+  effect(() => {
+    const subTree = render.call(stata, stata)
+    patch(null, subTree, container, anchor)
+  })
+}
+```
+
+这样，一旦组件自身的响应式数据发生变化，组件就会自动重新 执行渲染函数，从而完成更新。但是，由于 `effect` 的执行是同步 的，因此当响应式数据发生变化时，与之关联的副作用函数会同步执 行。换句话说，如果多次修改响应式数据的值，将会导致渲染函数执 行多次，这实际上是没有必要的。因此，我们需要设计一个机制，以 使得无论对响应式数据进行多少次修改，副作用函数都只会重新执行 一次。为此，我们需要实现一个调度器，当副作用函数需要重新执行 时，我们不会立即执行它，而是将它缓冲到一个微任务队列中，等到 执行栈清空后，再将它从微任务队列中取出并执行。有了缓存机制，我们就有机会对任务进行去重，从而避免多次执行副作用函数带来的 性能开销。具体实现如下：
+
+```js
+const queue = new Set()
+let isFlushing = false
+const p = Promise.resolve()
+function queueJob(job) {
+  queue.add(job)
+  if (!isFlushing) {
+    isFlushing = true
+    p.then(() => {
+      try {
+        queue.forEach(job => job())
+      } finally {
+        isFlushing = false
+        queue.clear()
+      }
+    })
+  }
+}
+```
+
+主要是利用了`Promise`的特性，将任务放到`Promise`的`then`中，这样就可以在执行栈清空后，再将它从微任务队列中取出并执行。同时`queue`是`Set`类型，可以进行去重。
+
+```js
+
+function mountComponent (vnode,container,anchor){
+    const {render,data} = vnode.type
+    const stata = reactive(data())
+
+    effect(()=>{
+
+        const subTree = render.call(stata,stata)
+        patch(null,subTree,container,anchor)
+      ]
+    },{
+        scheduler:queueJob
+    })
+}
+```
+
+不过，上面这段代码存在缺陷。可以看到，我们在 `effect` 函数 内调用 patch 函数完成渲染时，第一个参数总是 `null`。这意味着， 每次更新发生时都会进行全新的挂载，而不会打补丁，这是不正确 的。正确的做法是：每次更新时，都拿新的 `subTree` 与上一次组件所 渲染的 `subTree` 进行打补丁。为此，我们需要实现组件实例，用它来 维护组件整个生命周期的状态，这样渲染器才能够在正确的时机执行合适的操作。
+
+#### 12.3 组件实例与组件的生命周期
+
+组件实例本质上就是一个状态集合（或一个对象），它维护着组 件运行过程中的所有信息，例如注册到组件的生命周期函数、组件渲染的子树（`subTree`）、组件是否已经被挂载、组件自身的状态 （`data`），等等。为了解决上一节中关于组件更新的问题，我们需要引入组件实例的概念，以及与之相关的状态信息，如下面的代码所示：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  const { render, data } = vnode.type
+  const stata = reactive(data())
+  const instance = {
+    stata,
+    isMounted: false,
+    subTree: null,
+  }
+  vnode.component = instance
+  effect(
+    () => {
+      const subTree = render.call(stata, stata)
+      if (!instance.isMounted) {
+        // 更新
+        patch(null, subTree, container, anchor)
+        instance.isMounted = true
+      } else {
+        patch(instance.subTree, subTree, container, anchor)
+      }
+    },
+    {
+      scheduler: queueJob,
+    }
+  )
+}
+```
+
+在上面这段代码中，我们使用一个对象来表示组件实例，该对象 有三个属性。
+
+- `stata`：组件自身的状态，它是由 `data` 函数返回的响应式数据。
+- `isMounted`：组件是否已经挂载，它的初始值为 `false`，当组件挂载后，它的值会变为 `true`。
+- `subTree`：组件渲染的子树，它的初始值为 `null`，当组件挂载后，它的值会变为组件的渲染结果。
+- 在上面的实现中，组件实例的 instance.isMounted 属性可以 用来区分组件的挂载和更新。因此，我们可以在合适的时机调用组件 对应的生命周期钩子，如下面的代码所示：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  const { render, data, beforeCreate, created, beforeMount, mounted, beforeUpdate, updated } =
+    vnode.type
+  beforeCreate && beforeCreate()
+  const stata = reactive(data())
+  const instance = {
+    stata,
+    isMounted: false,
+    subTree: null,
+  }
+  vnode.component = instance
+  created && created.call(stata)
+  effect(
+    () => {
+      const subTree = render.call(stata, stata)
+      if (!instance.isMounted) {
+        // 更新
+        beforeMount && beforeMount.call(stata)
+        patch(null, subTree, container, anchor)
+        instance.isMounted = true
+        mounted && mounted.call(stata)
+      } else {
+        beforeUpdate && beforeUpdate(stata)
+        patch(instance.subTree, subTree, container, anchor)
+        updated && updated.call(stata)
+      }
+    },
+    {
+      scheduler: queueJob,
+    }
+  )
+}
+```
+
+#### 12.4 props 与组件的被动更新
+
+```js
+const MyComponent = {
+  props: {
+    name: String,
+  },
+  render() {
+    return {
+      type: 'div',
+      children: this.name,
+    }
+  },
+}
+```
+
+对于一个组件来说，有两部分关于 `props` 的内容我们需要 关心：
+
+- 组件自身的 `props`，它是由 `props` 函数返回的响应式数据，即 `vnode.props`。
+- 组件的 `props` 选项，它是一个对象，包含了组件的 `props` 配置信息，即 `MyComponent.props`。
+  我们需要结合这两个选项来解析出组件在渲染时需要用到的 props 数据，具体实现如下：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  const { render, data, props: porpsOption } = vnode.type
+  beforeCreate && beforeCreate()
+  const stata = reactive(data())
+  const [props, atttrs] = resolveProps(porpsOption, vnode.props)
+  const instance = {
+    stata,
+    isMounted: false,
+    subTree: null,
+    props: shallowReactive(props),
+  }
+  vnode.component = instance
+  //...
+}
+function resolveProps(propsOption, props) {
+  const res = {}
+  const attrs = {}
+  if (propsOption) {
+    for (const key in props) {
+      if (key in propsOption) {
+        res[key] = props[key]
+      } else {
+        attrs[key] = props[key]
+      }
+    }
+  }
+  return [res, attrs]
+}
+```
+
+在上面这段代码中，我们将组件选项中定义的 MyComponent.props 对象和为组件传递的 vnode.props 对象相结 合，最终解析出组件在渲染时需要使用的 props 和 attrs 数据。这里需要注意两点。
+
+- 在 Vue.js 3 中，没有定义在 `MyComponent.props` 选项中的 `props` 数据将存储到 `attrs` 对象中。
+- 上述实现中没有包含默认值、类型校验等内容的处理。实际上， 这些内容也都是围绕 `MyComponent.props` 以及 `vnode.props` 这两个对象展开的，实现起来并不复杂。
+
+在子组件中，`props`的更新是被动的，也就是说，子组件的 `props` 变化时，子组件不会自动更新，而是需要父组件重新渲染，从而触发子组件的更新。这是因为，子组件的 `props` 是由父组件传递的，子组件本身并没有权利修改 `props`。其中，`patchComponent` 函数用来完成子组件的更新。我们把由父组件自更新所引起的子组件更新叫作子组件的被动更新。当子组件发生被动更新时，我们需要做的是：
+
+- 检测子组件是否真的需要更新，因为子组件的 props 可能是不变的；
+- 如果需要更新，则更新子组件的 `props`、`slots` 等内容。
+
+patchComponent 函数的具体实现如下：
+
+```js
+funnction patchComponent(n1, n2, anchor) {
+  // 获取组件实例，即n1.component,同时让新的组件虚拟节点 n2.component 也指向组件实例，这样就可以在组件更新时获取到组件实例
+  const instance = (n2.component = n1.component)
+  // 获取当前的 props
+  const { props } = instance
+  // 调用 hasPropsChanged 函数检测 props 是否发生变化
+  if(hasPropsChanged(n1.props,n2.props)){
+      //调用 resolveProps 函数解析出新的 props 数据
+      const [nextProps] = resolveProps(n2.type.props, n2.props)
+      // 更新 props
+      for (const key in nextProps) {
+        props[key] = nextProps[key]
+      }
+      // 删除不存在的 props
+      for (const key in props) {
+        if (!(key in nextProps)) {
+          delete props[key]
+        }
+      }
+
+  }
+}
+function hasPropsChanged (prevProps,nextProps){
+  const nextKeys = Object.keys(nextProps)
+  if(nextKeys.length !== Object.keys(prevProps).length){
+    return true
+  }
+  for (let i = 0; i < nextKeys.length; i++) {
+    const key = nextKeys[i]
+    if(nextProps[key] !== prevProps[key]){
+      return true
+    }
+    return false
+  }
+}
+
+```
+
+上面是组件被动更新的最小实现，有两点需要注意：
+
+- 需要将组件实例添加到新的组件 `vnode` 对象上，即 `n2.component`、 `n1.component`，否则下次更新时将无法取 得组件实例；
+- `instance.props` 对象本身是浅响应的（即 `shallowReactive`）。因此，在更新组件的 `props` 时，只需要设置 `instance.props `对象下的属性值即可触发组件重新渲 染。
+
+由于 `props` 数据与组件自身的状态数据都需要暴露到渲染函数 中，并使得渲染函数能够通过 `this` 访问它们，因此我们需要封装一个渲染上下文对象，如下面的代码所示：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  // ...
+  const instance = {
+    stata,
+    isMounted: false,
+    subTree: null,
+    props: shallowReactive(props),
+  }
+  vnode.component = instance
+  const renderContext = new Proxy(instance, {
+    get(t, k, r) {
+      const { props, stata } = t
+      if (stata && k in stata) {
+        return stata[k]
+      } else if (props && k in props) {
+        return props[k]
+      } else {
+        console.error(`Property ${k} is not defined`)
+        return undefined
+      }
+    },
+    set(t, k, v, r) {
+      const { props, stata } = t
+      if (stata && k in stata) {
+        stata[k] = v
+      } else if (props && k in props) {
+        console.warn(CAttempting to mutate prop "$^k`". Props are readonly.C)
+      } else {
+        console.error(`Property ${k} is not defined`)
+      }
+    },
+  })
+  created && created.call(renderContext)
+  //...
+}
+```
+
+这样就为组件的上下文提供了一个代理，可以通过代理访问组件的状态和 `props`。
+
+#### 12.5 setup 函数的作用和实现
+
+组件的 `setup` 函数是 Vue.js 3 新增的组件选项，它有别于 Vue.js 2 中存在的其他组件选项。这是因为 `setup` 函数主要用于配合组合式 API，为用户提供一个地方，用于建立组合逻辑、创建响应式数据、创建通用函数、注册生命周期钩子等能力。在组件的整个生命周期中， `setup` 函数只会在被挂载时执行一次，它的返回值可以有两种情况。
+(1)返回一个函数，该函数将作为组件的 `render` 函数。
+
+```js
+const MyComponent = {
+  // setup返回一个函数，将该函数作为组件的render函数
+  setup() {
+    return () => {
+      return {
+        type: 'div',
+        children: 'hello world',
+      }
+    }
+  },
+}
+```
+
+这种方式常用于组件不是以模板来表达其渲染内容的情况。如果 组件以模板来表达其渲染的内容，那么 `setup` 函数不可以再返回函 数，否则会与模板编译生成的渲染函数产生冲突。
+
+(2)返回一个对象，该对象中包含的数据将暴露给模板使用
+
+```js
+const Comp = {
+  setup() {
+    const count = ref(0)
+    return {
+      count,
+    }
+  },
+  render() {
+    return {
+      type: 'div',
+      children: this.name,
+    }
+  },
+}
+```
+
+另外，`setup` 函数接收两个参数。第一个参数是 `props` 数据对 象，第二个参数也是一个对象，通常称为 `setupContext`，如下面的 代码所示：
+
+```js
+const Comp = {
+  props: {
+    foo: String,
+  },
+  setup(props, setupContext) {
+    props.foo // props中的数据
+    //  setupContext中的数据
+    const { attrs, slots, emit, expose } = setupContext
+    return {}
+  },
+}
+```
+
+从上面的代码可以看出，我们可以通过 setup 函数的第一个参数 取得外部为组件传递的 props 数据对象。同时，setup 函数还接收第 二个参数 setupContext 对象，其中保存着与组件接口相关的数据和 方法，如下所示。
+
+- `attrs`：包含了组件标签上的所有属性，它是一个响应式对象。
+- `slots`：包含了组件标签中的所有插槽内容，它是一个响应式对象。
+- `emit`：用来触发组件的自定义事件。
+- `expose`：用来暴露一些组件的内部方法或状态，使得外部可以访问到它们。
+
+`setup` 的最小实现：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  let { render, data, setup, props: propsOption } = vnode.type
+  beforeCreate && beforeCreate()
+  const state = reactive(data())
+  const [props, attrs] = resolveProps(propsOption, vnode.props)
+  const instance = {
+    state,
+    isMounted: false,
+    subTree: null,
+    props: shallowReactive(props),
+  }
+  const setupContext = {
+    attrs,
+    slots: vnode.slots,
+    emit: () => {},
+    expose: () => {},
+  }
+  const setupResult = setup(shallowReadonly(instance.props), setupContext)
+  let setupState = null
+  if (typeof setupResult === 'function') {
+    // setup返回一个函数，将该函数作为组件的render函数
+    instance.render = setupResult
+  } else if (typeof setupResult === 'object') {
+    instance.setupState = setupResult
+    instance.render = setupResult.render
+  }
+
+  vnode.component = instance
+  // ...
+}
+```
+
+#### 12.6 组件事件和 emit 的实现
+
+`emit`用来发射自定义事件。
+
+```js
+< MyComponent @change='handle'/>
+
+const MyComponent = {
+  name: 'MyComponent',
+  setup(props, setupContext) {
+    const handleClick = () => {
+      setupContext.emit('change', 1, 2)
+    }
+    return {
+      handleClick,
+    }
+  },
+}
+```
+
+#### 12.7 组件插槽的工作原理与实现
+
+```html
+// 子组件
+<template>
+  <header><slot name="header" /></header>
+  <div><slot name="bady/></div>
+  <footer>
+    <slot name="footer" />
+  </footer>
+</template>
+// 父组件
+<template>
+  <my-component>
+    <template #header>
+      <h1>header</h1>
+    </template>
+    <template #body>
+      <p>body</p>
+    </template>
+    <template #footer>
+      <p>footer</p>
+    </template>
+  </my-component></template
+>
+```
+
+上面这段父组件的模板会被编译成如下渲染函数：
+
+```js
+function render(){
+  return {
+    type:'myComponent',
+    children:[
+      header(){
+        return {
+          type:'h1',
+          children:'header'
+        }
+      },
+
+      body(){
+        return {
+          type:'p',
+          children:'body'
+        }
+      },
+      footer(){
+        return {
+          type:'p',
+          children:'footer'
+        }
+      },
+
+    ]
+  }
+}
+```
+
+可以看到，组件模板中的插槽内容会被编译为插槽函数，而插槽 函数的返回值就是具体的插槽内容。组件 `MyComponent` 的模板则会 被编译为如下渲染函数：
+
+```js
+function render() {
+  return {
+    type: 'div',
+    children: [
+      {
+        type: 'header',
+        children: [this.slots.header()],
+      },
+      {
+        type: 'div',
+        children: [this.slots.body()],
+      },
+      {
+        type: 'footer',
+        children: [this.slots.footer()],
+      },
+    ],
+  }
+}
+```
+
+在运行时的实现上，插槽则依赖于 setupContext 中的 slots 对象，如下面的代码所示：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  //...
+  // 将插槽函数添加到slots对象中，这样在渲染函数中就可以通过this.slots.header()来访问插槽函数
+  const slots = vnode.children || {}
+  // 将slots对象添加到setupContext中
+  const setupContext = {
+    attrs,
+    slots,
+    emit: () => {},
+    expose: () => {},
+  }
+}
+```
+
+可以看到，最基本的 `slots` 的实现非常简单。只需要将编译好的 `vnode.children` 作为 `slots` 对象，然后将 `slots` 对象添加到 `setupContext` 对象中。为了在 `render` 函数内和生命周期钩子函数 内能够通过 `this.$slots` 来访问插槽内容，我们还需要在 `renderContext` 中特殊对待 `$slots` 属性，如下面的代码所示：
+
+```js
+function mountComponent() {
+  const slots = vnode.children || {}
+  const instance = {
+    attrs,
+    slots,
+    emit: () => {},
+    expose: () => {},
+    props: shallowReadonly(instance.props),
+    state,
+  }
+  const renderContext = new Proxy(instance, {
+    get(t, k, r) {
+      const { props, state, slots } = t
+      if (k === '$slots') {
+        return slots
+      } else if (k in state) {
+        return state[k]
+      } else if (k in props) {
+        return props[k]
+      } else {
+        console.error(`Property ${k} is not defined`)
+        return undefined
+      }
+    },
+    set(t, k, v, r) {
+      const { props, state } = t
+      if (k in state) {
+        state[k] = v
+      } else if (k in props) {
+        console.warn(`Attempting to mutate prop "${k}". Props are readonly.`)
+      } else {
+        console.error(`Property ${k} is not defined`)
+      }
+    },
+  })
+}
+```
+
+#### 12.8 注册生命周期
+
+在 Vue.js 3 中，有一部分组合式 API 是用来注册生命周期钩子函数 的，例如 `onMounted` `、on8pdated` 等，如下面的代码所示：
+
+```js
+import { onMounted } from 'vue'
+const MyComponent = {
+  setup() {
+    onMounted(() => {
+      console.log('mounted1')
+    })
+    onMounted(() => {
+      console.log('mounted2')
+    })
+  },
+}
+```
+
+在组件渲染的时候，父子组件的生命周期，都是从虚拟 dom 中渲染的，那么确定生命周期钩子的层级。实际上，我们需要维 护一个变量 `currentInstance` ，用它来存储当前组件实例，每当初始化组件并执行组件的 `setup` 函数之前，先将 `currentInstance` 设置为当前组件实例，再执行组件的 `setup` 函数，这样我们就可以通 过 `currentInstance` 来获取当前正在被初始化的组件实例，从而将 那些通过 `onMounted` 函数注册的钩子函数与组件实例进行关联。
+
+```js
+// 用来存储当前组件实例
+let currentInstance = null
+// 该方法接好组件实例作为参数，并将其赋值给currentInstance
+function setCurrentInstance(instance) {
+  currentInstance = instance
+}
+// 组件渲染
+function mountComponent(vnode, container, anchor) {
+  const instance = {
+    state,
+    props: shallowReadonly(props),
+    isMounted: false,
+    subTree: null,
+    slots,
+    mounted: [],
+  }
+  // setup
+  const setupContext = {
+    attrs,
+    slots,
+    emit: () => {},
+  }
+  // 将组件实例赋值给currentInstance
+  setCurrentInstance(instance)
+  // 执行setup函数
+  const setupResult = setup(shallowReadonly(instance.props), setupContext)
+  // 将currentInstance设置为null
+  setCurrentInstance(null)
+  // ...
+}
+```
+
+`mounted`是一个数组，是因为在 vue3 中，`onMounted`可以执行多次，所以需要用数组来存储，这些都放在 `instance.mounted`中。
+下面是 `onMounted`的实现：
+
+```js
+function onMounted(fn) {
+  if (currentInstance) {
+    // 如果currentInstance存在，说明当前正在初始化组件，将fn添加到instance.mounted中
+    instance.mounted.push(fn)
+  } else {
+    // 如果currentInstance不存在，说明当前正在执行组件的render函数，
+    console.error('onMounted must be called during setup')
+  }
+}
+```
+
+最后一步需要做的是，在合适的时机调用这些注册到` instance.mounted` 数组中的生命周期钩子函数，如下面的代码所示：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  // ...
+  effect(()=>{
+    const subTree = render.call(renderContext,renderContext)
+    if(!instance.isMounted){
+      // ...
+      instance.mounted && instance.mounted.forEach(hook => hook.call(renderContext))
+    } else {
+      // ...
+      instance.subTree = subTree
+    },{
+      scheduler:queueJob
+    }
+  )
+  // 将组件实例赋值给currentInstance
+  setCurrentInstance(instance)
+  // 执行setup函数
+  const setupResult = setup(shallowReadonly(instance.props), setupContext)
+  // 将currentInstance设置为null
+  setCurrentInstance(null)
+  // ...
+  // 在合适的时机调用生命周期钩子函数
+  instance.mounted.forEach(hook => hook())
+}
+```
