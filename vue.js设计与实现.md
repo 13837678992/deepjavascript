@@ -3751,3 +3751,424 @@ function mountComponent(vnode, container, anchor) {
   instance.mounted.forEach(hook => hook())
 }
 ```
+
+### 第 13 章 异步组件和函数式组件
+
+在异步组件中，“异步”二字指的是，以异步的方式加载并渲染一个组件。 这在代码分割、服务端下发组件等场景中尤为重要。
+而函数式组件允许使用一个普通函数定义组件，并使用该函数的返回值作为组件要渲染的内容。函数式组件的特点是：无状态、编写简单且直观。
+使用函数式组件主要是因为性能差距并不大，但是函数式组件的编写方式更加简单，因此在一些场景下，函数式组件是一个不错的选择。
+
+##### 13.1 异步组件要解决的问题
+
+从根本上来说，异步组件的实现不需要任何框架层面的支持，用 户完全可以自行实现。渲染 App 组件到页面的示例如下：
+
+```js
+import App from 'App.vue'
+createApp(App).mount('#app')
+```
+
+上面这段代码所展示的就是同步渲染。我们可以轻易地将其修改 为异步渲染，如下面的代码所示：
+
+```js
+const loader = () => import('App.vue')
+loader().then(App => {
+  createApp(App).mount('#app')
+})
+```
+
+使用动态导入语句 `import()` 来加载组件，它会返回一 个 `Promise` 实例。组件加载成功后，会调用 `createApp` 函数完成挂载，这样就实现了以异步的方式来渲染页面。
+通常一个组件由多个组件渲染，每个组件负责渲染页面的一部分。那么，如果只想异步渲染部分页面，只需要有能力异步加载某一个组件就可以了。
+
+```html
+<template>
+  <CompA />
+  <component :is="asyncComp" />
+</template>
+<script>
+  import CompA from './CompA.vue'
+  import { shallowRef } from 'vue'
+  export default {
+    components: {
+      CompA,
+    },
+    setup() {
+      const asyncComp = shallowRef(null)
+      const loader = () => import('./CompB.vue')
+      loader().then(comp => {
+        asyncComp.value = comp.default
+      })
+      return {
+        asyncComp,
+      }
+    },
+  }
+</script>
+```
+
+但是在框架中，需要考虑如下几个方面:
+
+- 允许用户指定加载出错时要渲染的组件。
+- 允许用户指定 `Loading` 组件，以及展示该组件的延迟时间。
+- 允许用户设置加载组件的超时时长。
+- 组件加载失败时，为用户提供重试的能力。
+
+#### 13.2 异步组件的实现原理
+
+##### 13.2.1 封装 `defineAsyncComponent` 函数
+
+异步组件本质上是通过封装手段来实现友好的用户接口，从而降低用户层面的使用复杂度，如下面的用户代码所示：
+
+```html
+<template>
+  <AsyncComp />
+</template>
+<script>
+  export default {
+    components: {
+      AsyncComp: defineAsyncComponent(() => import('./AsyncComp.vue')),
+    },
+  }
+</script>
+```
+
+`defineAsyncComponent`是一个高阶组件，基本实现如下：
+
+```js
+// defineAsyncComponent 函数用于定义一个异步组件，接收一个异步组件加载器作为参数
+function defineAsyncComponent(loader) {
+  // 存储异步加载的组件
+  let InnerComp = null
+  // 返回一个组件选项对象
+  return {
+    name: 'AsyncComponentWrapper',
+    setup() {
+      // 异步组件加载是否成功
+      const loaded = ref(false)
+      // 执行加载器函数，返回一个Promise
+
+      loader().then(comp => {
+        InnerComp = comp.default
+        loaded.value = true
+      })
+      return () => {
+        // 如果异步组件加载成功，则渲染该组件
+        return loaded.value
+          ? { type: InnerComp }
+          : {
+              type: Text,
+              children: 'loading...',
+            }
+      }
+    },
+  }
+}
+```
+
+这里有以下几个关键点。
+
+- `defineAsyncComponent` 函数本质上是一个高阶组件，它的返 回值是一个包装组件。
+- 包装组件会根据加载器的状态来决定渲染什么内容。如果加载器成功地加载了组件，则渲染被加载的组件，否则会渲染一个占位内容。
+- 通常占位内容是一个注释节点。组件没有被加载成功时，页面中会渲染一个注释节点来占位。但这里我们使用了一个文本节点来占位。
+
+##### 13.2.2 超时和 Error 组件
+
+异步组件通常以网络请求的形式进行加载。前端发送一个 HTTP 请求，请求下载组件的 `JavaScript` 资源，或者从服务端直接获取组件数 据。既然存在网络请求，那么必然要考虑网速较慢的情况，尤其是在弱网环境下，加载一个组件可能需要很长时间。因此，我们需要为用户提供指定超时时长的能力，当加载组件的时间超过了指定时长后， 会触发超时错误。这时如果用户配置了 `Error` 组件，则会渲染该组件
+
+```js
+const AsyncComp = defineAsyncComponent({
+  loader: () => import('./AsyncComp.vue'),
+  timeout: 3000,
+  errorComponent: ErrorComp,
+})
+```
+
+- loader:异步组件加载器。
+- timeout:超时时长。
+- errorComponent:加载失败时渲染的组件。
+
+  具体的实现：
+
+```js
+function defineAsyncComponent(options) {
+  // options 可以是配置项，也可以是异步组件加载器
+  if (typeof options === 'function') {
+    // 如果 options 是加载器，则将其格式化为配置项形式
+    options = {
+      loader: options,
+    }
+  }
+  const { loader } = options
+  let InnerComp = null
+  return {
+    name: 'AsyncComponentWrapper',
+    setup() {
+      const loaded = ref(false)
+      // 定义一个错误对象，用来存储错误信息
+      const error = shawllowRef(null)
+      // 代表是否超时
+      const timeout = ref(false)
+      loader()
+        .then(comp => {
+          InnerComp = comp.default
+          loaded.value = true
+        })
+        .catch(err => {
+          error.value = err
+        })
+      let time = null
+      if (options.timeout) {
+        time = setTimeout(() => {
+          timeout.value = true
+        }, options.timeout)
+      }
+      onUmonut(() => {
+        clearTimeout(time)
+      })
+      const placeholder = { type: Text, children: 'loading...' }
+      return () => {
+        if (loaded.value) {
+          // 如果异步组件加载成功，则渲染该组件
+          return { type: InnerComp }
+        } else if (timeout.value) {
+          // 如果超时，则渲染错误组件
+          return options.errorComponent ? { type: options.errorComponent } : placeholder
+        } else if (error.value && errorComponent) {
+          // 如果错误，则渲染错误组件
+          return { type: options.errorComponent, props: { error: error.value } }
+        } else {
+          return placeholder
+        }
+      }
+    },
+  }
+}
+```
+
+关键点如下：
+
+- 需要一个标志变量来标识异步组件的加载是否已经超时，即 `timeout.value`。
+- 开始加载组件的同时，开启一个定时器进行计时。当加载超时后，将 `timeout.value` 的值设置为 `true` ，代表加载已经超时。这里需要注意的是，当包装组件被卸载时，需要清除定时器。
+- 包装组件根据 `loaded` 变量的值以及 `timeout` 变量的值来决定具 体的渲染内容。如果异步组件加载成功，则渲染被加载的组件； 如果异步组件加载超时，并且用户指定了 `Error` 组件，则渲染 `Error` 组件。
+- 当错误发生时，把错误对象作为 `Error` 组件的 `props` 传递过去， 以便用户后续能自行进行更细粒度的处理
+- 除了超时之外，有能力处理其他原因导致的加载错误，例如网络失败等。
+
+##### 13.2.3 延迟与 loading 组件
+
+对于延迟组件，一般都是全局注册，但是需要注意时间的问题，可能会出现闪烁的情况，为此，可以使用延迟来解决。
+
+```js
+function defineAsyncComponent(options) {
+  // options 可以是配置项，也可以是异步组件加载器
+  if (typeof options === 'function') {
+    // 如果 options 是加载器，则将其格式化为配置项形式
+    options = {
+      loader: options,
+    }
+  }
+  const { loader } = options
+  let InnerComp = null
+  return {
+    name: 'AsyncComponentWrapper',
+    setup() {
+      const loaded = ref(false)
+      // 定义一个错误对象，用来存储错误信息
+      const error = shawllowRef(null)
+      // 代表是否超时
+      const timeout = ref(false)
+      let loadingTimer = null
+
+      if (options.delay && typeof options.delay === 'number') {
+        loadingTimer = setTimeout(() => {
+          load.value = true
+        }, options.delay)
+      } else {
+        load.value = true
+      }
+      loader()
+        .then(comp => {
+          InnerComp = comp.default
+          loaded.value = true
+        })
+        .catch(err => {
+          error.value = err
+        })
+        .finally(() => {
+          load.value = false
+          clearTimeout(loadingTimer)
+        })
+      let time = null
+      if (options.timeout) {
+        time = setTimeout(() => {
+          timeout.value = true
+        }, options.timeout)
+      }
+      onUmonut(() => {
+        clearTimeout(time)
+      })
+      const placeholder = { type: Text, children: 'loading...' }
+      return () => {
+        if (loaded.value) {
+          // 如果异步组件加载成功，则渲染该组件
+          return { type: InnerComp }
+        } else if (timeout.value) {
+          // 如果超时，则渲染错误组件
+          return options.errorComponent ? { type: options.errorComponent } : placeholder
+        } else if (error.value && errorComponent) {
+          // 如果错误，则渲染错误组件
+          return { type: options.errorComponent, props: { error: error.value } }
+        } else {
+          return placeholder
+        }
+      }
+    },
+  }
+}
+```
+
+同时，在异步组件加载成功后，需要清除延迟计时器。而且要卸载 loading 组件。
+
+```js
+function umount(vnode) {
+  if (vnode.type === Fragement) {
+    vnode.children.forEach(child => umount(child))
+  } else if (vnode.type === Text) {
+    // ...
+  } else if (typeof vnode.type === 'object') {
+    // 对于组件的卸载，本质是卸载组件渲染的内容，即卸载组件的子树：subTree
+    umount(vnode.component.subTree)
+    // ...
+  } else if (typeof vnode.type === 'function') {
+    // ...
+  }
+  const parent = vnode.el.parentNode
+  if (parent) {
+    parent.removeChild(vnode.el)
+  }
+}
+```
+
+对于组件的卸载，本质上是要卸载组件所渲染的内容，即 `subTree` 。所以在上面的代码中，我们通过组件实例的 `vnode.component` 属性得到组件实例，再递归地调用 `unmount` 函 数完成 `vnode.component.subTree` 的卸载。
+
+##### 13.2.4 重试机制
+
+首先封装一个 `fetch` 函数，用来模拟接口请求：
+
+```js
+function fetch() {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      reject('error')
+    }, 1000)
+  })
+}
+```
+
+为了实现失败后的重试，我们需要封装一个 `load` 函数，如下面的代码所示：
+
+```js
+function load(onError) {
+  const p = fetch()
+  return p.catch(err => {
+    // 如果发生错误，则调用onError函数
+    return new Promise((resolve, reject) => {
+      // retry函数用来重试
+      const retry = () => {
+        return resolve(load(onError))
+      }
+
+      const fail = () => {
+        return reject(err)
+      }
+      onError(retry, fail)
+    })
+  })
+}
+// 调用load函数
+load((retry, fail) => {
+  // 重试
+  retry()
+  // 失败
+  fail()
+}).then(res => {
+  console.log(res)
+})
+```
+
+但是这里，在实际中一般设计为 `load(api, onError)`，这样可以更好的处理错误。
+
+```js
+function load(api, onError) {
+  const p = api()
+  return p.catch(err => {
+    // 如果发生错误，则调用onError函数
+    return new Promise((resolve, reject) => {
+      // retry函数用来重试
+      const retry = () => {
+        return resolve(load(api, onError))
+      }
+
+      const fail = () => {
+        return reject(err)
+      }
+      onError(retry, fail)
+    })
+  })
+}
+```
+
+当然第二个参数也可以写成配置项的形式，这样更加灵活。
+
+#### 13.3 函数式组件
+
+函数式组件的实现相对容易。一个函数式组件本质上就是一个普通函数，该函数的返回值是虚拟 `DOM` 。本章章首曾提到：“在 Vue.js 3 中使用函数式组件，主要是因为它的简单性，而不是因为它的性能好。”这是因为在 `Vue.js 3` 中，即使是有状态组件，其初始化性能消耗也非常小。
+
+```js
+function MyFuncComp(props) {
+  return {
+    type: 'div',
+    children: props.title,
+  }
+}
+```
+
+在渲染的时候，属于组件 `type`，所以 `patch`函数如下：
+
+```js
+function patch(n1, n2, container, anchor) {
+  if (n1 && n1.type !== n2.type) {
+    umount(n1)
+    n1 = null
+  }
+  const tyepe = n2.type
+  if (typeof type === 'string') {
+    //...
+  } else if (typeof type === Text) {
+    //...
+  } else if (typeof type === Fragment) {
+  } else if (typeof type === 'object' || typeof type === 'function') {
+    if (!n1) {
+      mountComponent(n2, container, anchor)
+    } else {
+      patchComponent(n1, n2, anchor)
+    }
+  }
+}
+```
+
+那么挂载组件是：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  const isFunction = typeof vnode.type === 'function'
+  let componentOptions = vnode.type
+  if (isFunction) {
+    componentOptions = {
+      render: vnode.type,
+      props: vnode.type.props,
+    }
+  }
+  //...
+}
+```
+
+
