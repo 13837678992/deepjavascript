@@ -4139,7 +4139,7 @@ function patch(n1, n2, container, anchor) {
     umount(n1)
     n1 = null
   }
-  const tyepe = n2.type
+  const type = n2.type
   if (typeof type === 'string') {
     //...
   } else if (typeof type === Text) {
@@ -4171,4 +4171,747 @@ function mountComponent(vnode, container, anchor) {
 }
 ```
 
+### 第 14 章 内建组件和模块
 
+#### 14.1 KeepAlive 组件的实现原理
+
+##### 14.1.1 组件的激活和失活
+
+组件缓存，即将组件的状态保存在内存中，当组件再次被渲染时，直接从内存中读取组件的状态，而不需要重新渲染组件。这样就可以避免组件的重新渲染，从而提升应用的性能。
+其实 `KeepAlive` 的本质是缓存管理，再加上特殊的挂载/卸载逻辑。
+首先，`KeepAlive`的实现需要浏览器的支持，他会在卸载的时候，将组件放在一个地方，等到需要的时候再从这里取出来，重新挂载到原来的位置。对应的生命周期是 `activated` 和 `deactivated`。
+![14-1](./img/vue/14-1.png)
+图 14-1 卸载” 和“ 挂载”一个被 `KeepAlive` 的组件的过程
+一个基础的 `KeepAlive`组件的实现如下：
+
+```js
+const KeepAlive = {
+  // 标识
+  _isKeepAlive: true,
+  setup(props, { slots }) {
+    // 用来存储缓存的组件实例
+    // key:vnode.type
+    // val:vnode
+    const cache = new Map()
+    // 用来存储缓存的组件实例
+    const instance = currentInstance
+    // 对于 KeepAlive 组件来说，他的实例上存在特殊的 keepAliveCtx 对象，该对象由渲染器注入
+    // 该对象会暴露渲染器的一些内部方法，其中 move 函数用来将一段 dom 移到另外一个容器中，
+    const { move, createElement } = instance.keeyAliveCtx
+    instance._deActivated = vnode => {
+      move(vnode, storageContainer)
+    }
+    instance._activate = (vnode, container, anchor) => {
+      move(vnode, container, anchor)
+    }
+    return () => {
+      // keepalive组件的插槽就是要被缓存的组件
+      let rawVNode = slots.default()
+      // 如果不是组件，直接渲染，因为非组件的虚拟节点无法缓存
+      if (typeof rawVNode.type !== 'object') {
+        return rawVNode
+      }
+      // 如果是组件，需要将其缓存起来
+      const cachedVNode = cache.get(rawVNode.type)
+      if (cacheVNode) {
+        // 如果缓存的组件存在，则直接从缓存中取出
+        rawVNode.component = cachedVNode.component
+      } else {
+        // 如果缓存的组件不存在，则将其缓存起来
+        cache.set(rawVNode.type, rawVNode)
+      }
+      // 在组件vnode 上添加 shouldKeepAlive 属性，并标记为 true ，避免渲染器正的将组件卸载，
+      rawVNode.shouldKeepAlive = true
+      // 将 KeepAlve 组件的实例也添加到vnode上，以便在渲染器中访问
+      rawVNode.keepAliveInstance = instance
+      // 渲染组件 vnode
+      return rawVNode
+    }
+  },
+}
+```
+
+从上面的实现中可以看到，与普通组件的一个较大的区别在于， `KeepAlive` 组件与渲染器的结合非常深。首先， `KeepAlive` 组件本身并 不会渲染额外的内容，它的渲染函数最终只返回需要被 `KeepAlive` 的组 件，我们把这个需要被 `KeepAlive` 的组件称为“内部组件”。`KeepAlive` 组件会对“内部组件”进行操作，主要是在“内部组件”的 `vnode` 对象上 添加一些标记属性，以便渲染器能够据此执行特定的逻辑。这些标记属性包括如下几个：
+
+- shouldKeepAlive：标识该组件是否需要被缓存。如果存在就不会卸载组件，而是会调用 \_deActivate 函数完成搬运工作，如下面的代码所示：
+
+```js
+function unmount(vnode) {
+  if (vnode.type === Fragment) {
+    vnode.children.forEach(child => unmount(child))
+  } else if (vnode.type === Text) {
+    // ...
+  } else if (typeof vnode.type === 'object') {
+    // vnode.shouldKeepAlive为true，说明该组件需要被缓存
+    if (vnode.shouldKeepAlive) {
+      // 调用组件实例的_deActivated函数完成搬运工作
+      vnode.keepAliveInstance._deActivated(vnode)
+    } else {
+      unmount(vnode.component.subTree)
+      // ...
+    }
+    // ...
+  }
+  const parent = vnode.el.parentNode
+  if (parent) {
+    parent.removeChild(vnode.el)
+  }
+}
+```
+
+- `keepAliveInstance` ：“内部组件”的 `vnode` 对象会持有 `KeepAlive` 组件实例，在 `unmount` 函数中会通过 `keepAliveInstance` 来访问 `_deActivate` 函数。
+
+- `keptAlive` ：“内部组件”如果已经被缓存，则还会为其添加一个 `keptAlive` 标记。这样当“内部组件”需要重新渲染时，渲染器并不会重新挂载它，而会将其激活，如下面 `patch` 函数的代码所示：
+
+```js
+function patch(n1, n2, container, anchor) {
+  if (n1 && n1.type !== n2.type) {
+    umount(n1)
+    n1 = null
+  }
+  const type = n2.type
+  if (typeof type === 'string') {
+    //...
+  } else if (typeof type === Text) {
+    //...
+  } else if (typeof type === Fragment) {
+  } else if (typeof type === 'object' || typeof type === 'function') {
+    if (!n1) {
+      if (n2.keptAlive) {
+        n2.keepAliveInstance._activate(n2, container, anchor)
+      } else {
+        mountComponent(n2, container, anchor)
+      }
+    } else {
+      patchComponent(n1, n2, anchor)
+    }
+  }
+}
+```
+
+对于 `KeepAlive`的激活和失活函数：
+
+```js
+const { move, createElement } = instance.keeyAliveCtx
+instance._deActivated = vnode => {
+  move(vnode, storageContainer)
+}
+instance._activate = (vnode, container, anchor) => {
+  move(vnode, container, anchor)
+}
+```
+
+那么重点在渲染器中，为了保持多平台兼容性，我们需要在渲染器中实现 `move` 函数，如下面的代码所示：
+
+```js
+function mountComponent(vnode, container, anchor) {
+  // ...
+  const instance = {
+    state,
+    props: shallowReadonly(props),
+    isMounted: false,
+    subTree: null,
+    slots,
+    mounted: [],
+    // 只有 KeepAlive 组件的实例才会有这个属性
+    keeyAliveCtx: null,
+  }
+  // 检查组件是否是 KeepAlive 组件
+  const isKeepAlive = vnode.type._isKeepAlive
+  if (isKeepAlive) {
+    // 如果是 KeepAlive 组件，则为其创建一个 keepAliveCtx 对象
+    instance.keeyAliveCtx = {
+      move: (vnode, container, anchor) => {
+        if (vnode.el) {
+          // 如果vnode.el存在，则将其移动到指定位置
+          insert(vnode.component.subTree.el, container, anchor)
+        } else {
+          // 如果vnode.el不存在，则说明该组件是初次渲染，需要调用mount函数挂载
+          mount(vnode, container, anchor)
+        }
+      },
+      createElement: () => {},
+    }
+  }
+}
+```
+
+##### 14.1.2 incloude 和 exclude
+
+`incloude` 是应该缓存的组件， `exclude` 是不需要缓存的组件，
+`KeepAlive` 组件的 `props` 定义如下：
+
+```js
+const KeepAlive = {
+  _isKeepAlive: true,
+  props: {
+    include: RegExp,
+    exclude: RegExp,
+  },
+  setup(props, { slots }) {
+    // ...
+    return () => {
+      let rawVNode = slots.default()
+      if (typeof rawVNode.type !== 'object') {
+        return rawVNode
+      }
+      const name = rawVNode.type.name
+      const { include, exclude } = props
+      if (
+        name &&
+        ((props.incloude && !props.include.test(name)) ||
+          (props.exclude && props.exclude.test(name)))
+      ) {
+        return rawVNode
+      }
+    }
+  },
+}
+```
+
+##### 14.1.3 缓存管理
+
+缓存的处理逻辑可以总结为：
+
+- 如果缓存存在，则继承组件实例，并将用于描述组件的 `vnode` 对 象标记为 `keptAlive` ，这样渲染器就不会重新创建新的组件实例；
+- 如果缓存不存在，则设置缓存。
+
+但是在极端情况下，当缓存不存在的时候，总是添加新的缓存，导致缓存大量占用。所以需要设置缓存的阀值，当缓存的数量超过阀值时，就会删除最早的缓存。通过 max 属性来设置缓存的阀值，才用 `最近一次访问` 的策略来删除缓存。
+但是在实现缓存策略的时候，应该考虑，是否能够改变缓存策略，所以需要将缓存策略抽象出来，这样就可以在外部进行配置。
+
+```js
+// max
+<keep-alive :max="2">
+  <component :is='dynamicComp' />
+</keep-alive>
+
+// cache
+<keep-alive :cache="cache">
+  <Comp />
+</keep-alive>
+
+// 自定义实现
+// 但是这种方案目前还不在vue3中
+const _cache = new Map()
+const cache : KeepAliveCache = {
+  get(key){
+    _cache.get(key)
+  },
+  set(key, val){
+    _cache.set(key, val)
+  },
+  delete(key){
+    _cache.delete(key)
+  },
+  forEach(fn){
+    _cache.forEach(fn)
+  }
+}
+```
+
+自定义 cache，目前在提议中 ： [pull requests](https://github.com/vuejs/core/pull/8701/commits)
+
+```js
+import { ref, onMounted, onUnmounted } from 'vue'
+
+export default {
+  name: 'MyComponent',
+  setup() {
+    const key = ref(null)
+
+    onMounted(() => {
+      key.value = Math.random().toString(36).substring(7)
+    })
+
+    onUnmounted(() => {
+      cache.delete(key.value)
+    })
+
+    return { key }
+  }
+}
+
+const cache = {
+  _cache: new Map(),
+
+  get(key) {
+    return this._cache.get(key)
+  },
+
+  set(key, val) {
+    this._cache.set(key, val)
+  },
+
+  delete(key) {
+    this._cache.delete(key)
+  },
+
+  forEach(fn) {
+    this._cache.forEach(fn)
+  }
+}
+
+// 在模板中使用
+<template>
+  <keep-alive :cache="cache">
+    <MyComponent :key="key" />
+  </keep-alive>
+</template>
+```
+
+#### 14.2 Teleport 组件的实现原理
+
+##### 14.2.1 Teleport 组件要解决的问题
+
+该组件可以将指定内容渲染到特定容器中，而不受 DOM 层级的限制。
+
+```js
+<template>
+  <div style='z-index:-1;'>
+    <Teleport to="body">
+      <div>Teleport</div>
+    </Teleport>
+  </div>
+</template>
+<style scoped>
+  .overlay {
+    z-index: 9999;
+  }
+</style>
+```
+
+通过为 `Teleport` 组件指定渲染目标 `body` ，即 `to` 属性的值，该组件就会直接把它的插槽内容渲染到 `body` 下，而不会按照模板的 `DOM` 层级来渲染，于是就实现了跨 DOM 层级 的渲染。最终 `<Overlay>` 组件的 `z-index` 值也会按预期工作，并遮挡页面中的所有内容。
+
+##### 14.2.2 Teleport 组件的实现
+
+与 `KeepAlive` 组件一样， `Teleport` 组件也需要渲染器的底层支持。 首先我们要将 `Teleport` 组件的渲染逻辑从渲染器中分离出来，这么做有两点好处：
+
+- 可以避免渲染器逻辑代码“膨胀”；
+- 当用户没有使用 `Teleport` 组件时，由于 `Teleport` 的渲染逻辑被分离，因此可以利用 `TreeShaking` 机制在最终的 `bundle` 中删除 `Teleport` 相关的代码，使得最终构建包的体积变小。
+
+为了完成逻辑分离的工作，要先修改 patch 函数，如下面的代码 所示：
+
+```js
+function patch(n1, n2, constainer, anchor) {
+  // ...
+  if (typeof type === 'string') {
+    // ...
+  } else if (typeof type === Text) {
+    // ...
+  } else if (typeof type === 'object' && type._isTeleport) {
+    // 组件选项中如果存在 _isTeleport 标识，则它是 Teleport 组件，
+    // 调用 Teleport 组件选项中的 process 函数将控制权交接出去
+    // 传递给 process 函数的第五个参数是渲染器的一些内部方法
+    type.process(n1, n2, container, anchor, {
+      patch,
+      patchChildren,
+      unmount,
+      move(vnode, container, anchor) {
+        insert(vnode.component ? vnode.component.subTree.el : vnode.el, container, anchor)
+      },
+    })
+  } else if (typeof type === Fragment) {
+  } else if (typeof type === 'object' || typeof type === 'function') {
+    // ...
+  }
+}
+```
+
+Teleport 的虚拟 dom
+
+```js
+const Teleport = {
+  _isTeleport: true,
+  process(n1, n2, container, anchor) {
+    // ...
+  },
+}
+<Teleport to='body'>
+  <h1>Title</h1>
+  <p>content</p>
+</Teleport>
+```
+
+通常，一个组件的子节点会被编译为插槽内容， 不过对于 `Teleport` 组件来说，直接将其子节点编译为一个数组即可，如下面的代码所示：
+
+```js
+function render(){
+  retutn{
+    type:Teleport,
+    children:[
+      { type : 'h1',children: 'Title '},
+      { type : 'p',children: 'content'},
+    ]
+  }
+}
+```
+
+虚拟 `dom` 生成之后就是挂载虚拟 `dom(patch)` (Teleport 接管自己的挂载)。
+
+```js
+const Teleport = {
+  _isTeleport: true,
+  process(n1, n2, container, anchor, internals) {
+    // 通过 internals 参数取得渲染器的内部方法
+    const { patch, patchChildren, move } = internals
+    // 如果 n1 不存在，则说明是初次渲染
+    if (!n1) {
+      // 挂载，获取挂载点
+      const target =
+        typeof n2.type.to === 'string' ? document.querySelector(n2.type.to) : n2.type.to
+      n2.children.forEach(child => {
+        patch(null, child, target, anchor)
+      })
+    } else {
+      // 更新
+      patchChildren(n1, n2, container)
+      if (n2.type.to !== n1.type.to) {
+        // 如果目标容器发生了变化，则将子节点移动到新的容器中
+        const newTarget =
+          typeof n2.type.to === 'string' ? document.querySelector(n2.type.to) : n2.type.to
+        n2.children.forEach(child => {
+          move(child, newTarget)
+        })
+      }
+    }
+  },
+}
+```
+
+#### 14.3 Transition 组件的实现原理
+
+`Transition`的实现也是类似于 `KeepAlive`都是在渲染器中进行配置，
+他的实现比较简单，主要是在过程中添加动效，
+
+- 当 DOM 元素被挂载时，将动效附加到该 DOM 元素上；
+- 当 DOM 元素被卸载时，不要立即卸载 DOM 元素，而是等到附加 到该 DOM 元素上的动效执行完成后再卸载它。
+
+##### 14.3.1 原生 dom 的动效
+
+为了更好地理解 `Transition` 组件的实现原理，我们有必要先讨论如 何为原生 DOM 创建过渡动效。过渡效果本质上是一个 DOM 元素在两种状态间的切换，浏览器会根据过渡效果自行完成 DOM 元素的过渡。 这里的过渡效果指的是**持续时长、运动曲线、要过渡的属性**等。
+
+```vue
+// 有一个div
+<div id="box"></div>
+// 有一个css
+<script lange="css">
+.box {
+  width: 100px;
+  height: 100px;
+  background-color: red;
+}
+// 添加一个动效：从距离左边 200px 的位置在 1 秒内运动到距离左边 0px 的位 置。
+.enter-from {
+  transform:translateX(200px);
+}
+.enter-to {
+  transform : translateX(0);
+}
+.enter-active {
+  transition:transform 1s ease-in-out;
+}
+</script>
+<script>
+const el = document.getElementById('#box')
+// 初始状态
+el.classList.add('enter-from')
+// 运动过程
+el.classList.add('enter-active')
+// 切换
+el.classList.remove('enter-from')
+el.classList.add('enter-to')
+</script>
+```
+
+操作真是 dom 是没有问题，如果这里的 dom 是 vue 的虚拟 dom，那么就没有初始的状态，因为浏览器会在当前帧中绘制。如果是虚拟 dom 可以这样操纵：
+
+```js
+const el = document.createElement('div')
+el.classList.add('box')
+
+// 初始状态
+el.classList.add('enter-from')
+// 运动过程
+el.classList.add('enter-active')
+//将元素添加到页面
+document.body.appendChild(el)
+// 在下一帧切换元素的状态
+requestAnimationFrame(() => {
+  el.classList.remove('enter-from')
+  el.classList.add('enter-to')
+})
+```
+
+但是这样操作也是有问题的，这是浏览器的实现 bug 所致。[交互](https://bugs.chromium.org/p/chromium/issues/detail?id=675795)
+根据描述，这个问题是在 `edge` 没有问题，在 chrome 等浏览器都有问题，但是在我的测试下(mac m1) edge 同样会出现问题，给出实例代码：
+[具体解释](https://juejin.cn/post/7309116824683397131)
+
+```html
+<!DOCTYPE>
+<html>
+
+<head>
+</head>
+
+<body>
+  <script>
+
+    const blockThread = (t) => {
+      console.log('scheduling work at', t);
+      console.log('perf now says', performance.now());
+    }
+
+    document.body.addEventListener('click', () => {
+      console.log('click at', performance.now());
+      // requestAnimationFrame((t) => {
+      //   console.log('rAF at', t, ', perf now says', performance.now());
+      // });
+      // 双重 rAF 才能正确的在下一帧执行
+      requestAnimationFrame(() => requestAnimationFrame((t) => {
+        console.log('rAF at', t, ', perf now says', performance.now());
+      }));
+    })
+
+  </script>
+</body>
+</head>
+```
+
+当动画结束之后，就是清除多余的 `class`
+
+```js
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    el.classList.remove('enter-from')
+    el.classList.add('enter-to')
+    el.addEventListener('transitionend', () => {
+      el.classList.remove('enter-active')
+      el.classList.remove('enter-to')
+    })
+  })
+})
+```
+
+总结来说就是：
+
+```css
+// 初始状态
+.leave-from {
+  transform: translateX(0);
+}
+// 运动过程
+.leave-active {
+  transition: transform 1s ease-in-out;
+}
+// 结束
+.leave-to {
+  transform: translateX(200px);
+}
+```
+
+对于离场动画，发生在组件卸载之前，所以需要在卸载之前添加动效，而对于进场动画，发生在组件挂载之后，所以需要在挂载之后添加动效。
+
+```js
+// 卸载dom
+el.addEventListener('click', () => {
+  el.parentNode.removeChild(el)
+})
+```
+
+但是如果是这样立刻卸载的话，是没有过度动画的。所以需要等待动画结束，再卸载 dom。
+
+```js
+el.addEventlistener('click', () => {
+  // 封装卸载
+  const performRemove = () => {
+    el.parentNode.removeChild(el)
+  }
+  // 初始
+  el.classList.add('leave-from')
+  // 运动
+  el.classList.add('leave-active')
+  // 强制 reflow (回流)使浏览器强制渲染
+  document.body.offsetHeight
+  // 切换
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      // 切换到结束
+      el.classList.remove('leave-from')
+      el.classList.add('leave-to')
+      // 监听 transitionend 动效结束
+      el.addEventListener('transitionend', () => {
+        // 移除动效
+        el.classList.remove('leave-active')
+        el.classList.remove('leave-to')
+        // 卸载dom
+        performRemove()
+      })
+    })
+  })
+})
+```
+
+##### 14.3.2 实现 Transition 组件
+
+对于上面的过渡，主要是原生 dom 的操纵，但是 `Transition` 却是操作虚拟 dom 来实现的。
+Transition 组件的虚拟 dom
+
+```js
+<template>
+  <Transition>
+    <div>我是需要过渡的元素</div>
+  </Transition>
+</template>
+
+// 虚拟dom
+funcion render(){
+  return {
+    type:Transition,
+    children:{
+      default:() => {
+        return {
+          type:'div',
+          children:'我是需要过渡的元素'
+        }
+      }
+    }
+  }
+}
+
+
+```
+
+他的子节点已经默认编译为插槽内容，所以不需要额外的处理，先看看该组件的实现。
+
+```js
+const Transition = {
+  name: 'Transition',
+
+  setup(props, { slots }) {
+    return () => {
+      // 获取插槽内容
+      const innerVNode = slots.default()
+      // 添加对应的钩子
+      innerVNode.transition = {
+        beforeEnter(el) {
+          // ...
+        },
+        enter(el) {
+          // ...
+        },
+        leave(el, performRemove) {
+          // ...
+        },
+      }
+      return innerVNode
+    }
+  },
+}
+```
+
+可以看到， `Transition` 组件本身并不渲染任何的内容，只渲染插槽的内容；然后再虚拟 dom 的过渡中添加对应的钩子。
+这些钩子会挂载在对应的生命周期上，如下面的代码所示：
+
+```js
+// 挂载
+function mountElement(vnode, container, anchor) {
+  const el = (vnode.el = createElement(vnode.type))
+  if (typeof vode.children === 'string') {
+    setElementText(el, vnode.children)
+  } else if (Array.isArray(vnode.children)) {
+    vnode.children.forEach(v => {
+      patch(null, v, el)
+    })
+  }
+  if (vnode.props) {
+    for (const key in vnode.props) {
+      const val = vnode.props[key]
+      patchProps(el, key, null, val)
+    }
+  }
+  // 判断时候需要过渡
+  const needTransition = vnode.transition
+  if (needTransition) {
+    needTransition.beforeEnter(el)
+    // 强制浏览器渲染
+    el.offsetHeight
+    insert(el, container, anchor)
+    needTransition.enter(el)
+    // 强制浏览器渲染
+    el.offsetHeight
+    queuePostRenderEffect(() => {
+      needTransition.enterCancelled && needTransition.enterCancelled(el)
+    })
+  }
+}
+
+// 卸载
+function unmount(vnode) {
+  const needTransition = vnode.transition
+  if (vnode.type === Fragment) {
+    vnode.children.forEach(child => {
+      unmount(child)
+    })
+    return
+  } else if (typeof vnode.type === 'object') {
+    // ...
+  }
+  const parent = vnode.el.parentNode
+  if (parent) {
+    const performRemove = () => {
+      parent.removeChild(vnode.el)
+    }
+  }
+  if (needTransition) {
+    needTransition.leave(vnode.el, performRemove)
+  } else {
+    performRemove()
+  }
+}
+```
+
+因此可以实现一个简单的 `Transition` 组件，如下面的代码所示：
+
+```js
+const Transition = {
+  name: 'Transition',
+  setup(props, { slots }) {
+    return () => {
+      const innerVNode = slots.default()
+      innerVNode.transition = {
+        beforeEnter(el) {
+          el.classList.add('enter-from')
+          el.classList.add('enter-active')
+
+        },
+        enter(el) {
+          nextFrame(() => {
+            el.classList.remove('enter-from')
+            el.classList.add('enter-to')
+            el.addEventListener('transitionend', () => {
+              el.classList.remove('enter-active')
+              el.classList.remove('enter-to')
+            })
+          })
+        },
+        leave(el, performRemove) {
+          el.classList.add('leave-from')
+          el.classList.add('leave-active')
+          document.body.offsetHeight
+          nextFrame(() => {
+            el.classList.remove('leave-from')
+            el.classList.add('leave-to')
+            el.addEventListener('transitionend', () => {
+              el.classList.remove('leave-active')
+              el.classList.remove('leave-to')
+              performRemove()
+            })
+          })
+        },
+        },
+      }
+      return innerVNode
+    }
+  },
+}
+```
