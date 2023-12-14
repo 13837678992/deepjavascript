@@ -4882,7 +4882,6 @@ const Transition = {
         beforeEnter(el) {
           el.classList.add('enter-from')
           el.classList.add('enter-active')
-
         },
         enter(el) {
           nextFrame(() => {
@@ -4908,10 +4907,735 @@ const Transition = {
             })
           })
         },
-        },
       }
       return innerVNode
     }
   },
 }
 ```
+
+## 第五篇 编译器
+
+### 第 15 章 编译器核心技术概览
+
+编译技术是一门庞大的学科，我们无法用几个章节对其做完善的讲解。但不同用途的编译器或编译技术的难度可能相差很大，对知识 的掌握要求也会相差很多。如果你要实现诸如 C、JavaScript 这类通用（general purpose language），那么就需要掌握较多编译技术知识。例如，理解上下文无关文法，使用巴科斯范式（BNF），扩展 巴科斯范式（EBNF）书写语法规则，完成语法推导，理解和消除左递归，递归下降算法，甚至类型系统方面的知识等。但作为前端工程师，我们应用编译技术的场景通常是：表格、报表中的自定义公式计算器，设计一种领域特定语言（DSL）等。其中，实现公式计算器甚至只涉及编译前端技术，而领域特定语言根据其具体使用场景和目标平台的不同，难度会有所不同。Vue.js 的模板和 JS; 都属于领域特定语言，它们的实现难度属于中、低级别，只要掌握基本的编译技术理论即可实现这些功能。
+
+#### 15.1 模版 DSL 的编译器
+
+编译器其实只是一段程序，它用来将“一种语言 A”翻译成“另外一种语言 B”。其中，语言 A 通常叫作 （`source code`），语言 B 通 常叫作 （`object code` 或 `target code`）。编译器将源代码翻译为目标代码的过程叫作(`compile`)。完整的编译过程通常包含词法分析、语法分析、语义分析、中间代码生成、优化、目标代码生成等步骤，如图 15-1 所示。
+![15-1](./img/vue/15-1.png)
+图 15-1 编译器的基本流程
+图 15-1 展示了“教科书”式的编译模型，但 Vue.js 的模板作为 DSL，其编译流程会有所不同。对于 Vue.js 模板编译器来说，源代码 就是组件的模板，而目标代码是能够在浏览器平台上运行的 `JavaScript` 代码，或其他拥有 `JavaScript` 运行时的平台代码，如图 15-2 所示。
+![15-2](./img/vue/15-2.png)
+图 15-2 Vue.js 模板编译器的目标代码是 `JavaScript` 代码
+可以看到，Vue.js 模板编译器的目标代码其实就是渲染函数。详细 而言，Vue.js 模板编译器会首先对模板进行词法分析和语法分析，得到模板 AST。接着，将模板 AST （transform）成 JavaScript AST。 最后，根据 JavaScript AST 生成 JavaScript 代码，即渲染函数代码。图 15-3 给出了 Vue.js 模板编译器的工作流程。
+![15-3](./img/vue/15-3.png)
+图 15-3 Vue.js 模板编译器的工作流程
+AST 是 `abstract syntax tree` 的首字母缩写，即抽象语法树。所谓模板 AST，其实就是用来描述模板的抽象语法树。举个例子，假设我们有如下模板：
+
+```js
+<div>
+  <h1 v-if="ok">Vue Template</h1>
+</div>
+```
+
+这段模板会被编译为如下所示的 AST：
+
+```js
+const ast = {
+// 根节点
+type:'Root',
+children:[
+  // div 标签节点
+  {
+    type:'Element',
+    tag:'div',
+    children:[
+      // h1 标签节点
+      {
+        type:'Element',
+        tag:'h1',
+        // 属性
+        props:[
+          // v-if 指令
+          {
+            type:'Directive', // 类型为 Directive
+            name:'if',      // 指令名称 ，不带前缀
+            exp:{
+              // 指令表达式
+              type:'Expression',
+              content:'ok'
+            }
+          }
+        ]
+      }
+    ]
+  }
+]
+```
+
+可以看到，AST 其实就是一个具有层级结构的对象。模板 AST 具有与模板同构的嵌套结构。每一棵 AST 都有一个逻辑上的根节点，其类型为 Root。模板中真正的根节点则作为 Root 节点的 children 存在。观察上面的 AST，我们可以得出如下结论。
+
+- 不同类型的节点是通过节点的 type 属性进行区分的。例如标签节点的 type 值为 `Element`。
+- 标签节点的子节点存储在其 `children` 数组中
+- 标签节点的属性节点和指令节点会存储在 props 数组中。
+- 不同类型的节点会使用不同的对象属性进行描述。例如指令节点 拥有 `name` 属性，用来表达指令的名称，而表达式节点拥有 `content` 属性，用来描述表达式的内容。
+
+通过封装 `parse` 函数来完成对模板的词法分析和语法分析，得到模板 AST，
+
+```js
+const template = `<div>
+  <h1 v-if="ok">Vue Template</h1>
+</div>`
+const ast = parse(template)
+```
+
+有了模板 AST 后，我们就可以对其进行语义分析，并对模板 AST 进行转换了。
+什么是语义分析呢？举几个例子:
+
+- 检查 v-else 指令是否存在相符的 v-if 指令。
+- 分析属性值是否是静态的，是否是常量等。
+- 插槽是否会引用上层作用域的变量。
+- ……
+
+在语义分析的基础上，我们即可得到模板 AST。接着，我们还需要将模板 AST 转换为 `JavaScript` AST。因为 Vue.js 模板编译器的最终目标是生成渲染函数，而渲染函数本质上是 `JavaScript` 代码，所以我们需要将模板 AST 转换成用于描述渲染函数的 `JavaScript` AST。
+可以封装 `transform` 函数来完成模板 AST 到 `JavaScript` AST 的转换工作，如图 15-5 所示
+![15-5](./img/vue/15-5.png)
+图 15-5 `transform` 函数的作用
+有了 `JavaScript` AST 后，我们就可以根据它生成渲染函数了，这一 步可以通过封装 `generate` 函数来完成，如图 15-6 所示。
+![15-6](./img/vue/15-6.png)
+图 15-6 `generate` 函数的作用
+完整的流程:
+![15-7](./img/vue/15-7.png)
+图 15-7 将 Vue.js 模板编译为渲染函数的完整流程
+
+#### 15.2 parser 的实现原理与状态机
+
+Vue.js 模版编译器的基本流程主要是三个流程：
+
+- `parser` 模板字符串解析为模板 AST
+- `transformer` 模板 AST 转换为 `JavaScript` AST
+- `generator` `JavaScript` AST 生成渲染函数
+
+解析器的入参是字符串模板，解析器会逐个读取字符串模板中的字符，并根据一定的规则将整个字符串切割为一个个 Token。这里的 Token 可以视作词法记号，后续我们将使用 Token 一词来代表词法记号进行讲解。举例来说，假设有这样一段模板：
+
+```html
+<p>vue</p>
+```
+
+解析器会把这段字符串模板切割为三个 Token。
+
+- 开始标签：`<p>`。
+- 文本节点：vue。
+- 结束标签：`</p>`。
+
+解析器是如何对模板进行切割的呢？拿上面的模板来说，当我们分析这段模板字符串时，parse 函数会逐个读取字符，状态机会有一个初始状态，我们记为“初始状态 1”。图 15-8 给出了状态迁移的过程。
+![15-8](./img/vue/15-8.png)
+图 15-8 解析器的状态机图
+
+- 状态机始于“初始状态 1”。
+- 在“初始状态 1”下，读取模板的第一个字符 <，状态机会进入下一个状态，即“标签开始状态 2”。
+- 在“标签开始状态 2”下，读取下一个字符 p。由于字符 p 是字母， 所以状态机会进入“标签名称状态 3”。
+- 在“标签名称状态 3”下，读取下一个字符 >，此时状态机会从“标签名称状态 3”迁移回“初始状态 1”，并记录在“标签名称状态”下产生的标签名称 p。
+- 在“初始状态 1”下，读取下一个字符 9，此时状态机会进入“文本状态 4”。
+- 在“文本状态 4”下，继续读取后续字符，直到遇到字符 < 时，状态机会再次进入“标签开始状态 2”，并记录在“文本状态 4”下产生的文本内容，即字符串“vue”。
+- 在“标签开始状态 2”下，读取下一个字符 /, 标签状态 5”。
+- 在“结束标签状态 5”下，读取下一个字符 p，状态机会进入“结束标签名称状态 6”。
+- 在“结束标签名称状态 6”下，读取最后一个字符 >，它是结束标签的闭合字符，于是状态机迁移回“初始状态 1”，并记录在“结束标签名称状态 6”下生成的结束标签名称。
+
+经过这样一系列的状态迁移过程之后，我们最终就能够得到相应的 Token 了。观察图 15-8 可以发现，有的圆圈是单线的，而有的圆圈是双线的。双线代表此时状态机是一个合法的 Token(这里并不严谨)。
+按照有限状态自动机的状态迁移过程，我们可以很容易地编写对应的代码实现。因此，有限状态自动机可以帮助我们完成对模板的标记化（ `tokenized` ），最终我们将得到一系列 Token。图 15-8 中描述的状态机的实现如下：
+
+```js
+const State = {
+  initial: 1, // 初始状态
+  tagOpen: 2, // 标签开始状态
+  tagName: 3, // 标签名称状态
+  text: 4, // 文本状态
+  tagEnd: 5, // 结束标签状态
+  tagEndName: 6, // 结束标签名称状态
+}
+// 辅助函数，判断是否是字母
+function isAlpha(char) {
+  return (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z')
+}
+// 接受模版字符串作为参数，并将模版切割为一系列 Token返回，
+function tokenize(str) {
+  // 初始化状态机
+  let currentState = State.initial
+  // 用作缓存字符
+  let chars = []
+  // 生成的 Token 会存储在 tokens 数组中，并作为函数的返回值返回
+  const tokens = []
+  // 读取字符
+  while (str) {
+    // 查看第一个字符，这里只是查看，没有消费该字符
+    const char = str[0]
+    // switch 语句匹配当前状态
+    switch (currentState) {
+      // 初始状态
+      case State.initial:
+        // 如果是 < 则进入标签开始状态
+        if (char === '<') {
+          // 1. 当前是初始状态
+          currentState = State.tagOpen
+          // 2. 消费字符 <
+          str = str.substring(1)
+        } else if (isAlpha(char)) {
+          // 1. 如果是字母，则进入文本状态
+          currentState = State.text
+          // 2. 字母缓存到 chars 中
+          chars.push(char)
+          // 3. 消费字符
+          str = str.substring(1)
+        }
+        break
+      case State.tagOpen:
+        if (isAlpha(char)) {
+          // 1. 如果是字母，则进入标签名称状态
+          currentState = State.tagName
+          // 2. 将之前的字符缓存到 chars 中
+          chars.push(char)
+          // 3. 消费字符
+          str = str.substring(1)
+        } else if (char === '/') {
+          // 1. 如果是 / 则进入结束标签状态
+          currentState = State.tagEnd
+          // 2. 消费字符
+          str = str.substring(1)
+        }
+        break
+      case State.tagName:
+        if (isAlpha(char)) {
+          // 1. 如果是字母，则继续保持标签名称状态
+          currentState = State.tagName
+          // 2. 将之前的字符缓存到 chars 中
+          chars.push(char)
+          // 3. 消费字符
+          str = str.substring(1)
+        } else if (char === '>') {
+          // 1. 如果是 > 则进入初始状态
+          currentState = State.initial
+          // 2. 同时创建一个标签 Token，并添加到 tokens 中
+          // 这个时候到chars 是标签名
+          tokens.push({
+            type: 'tag',
+            name: chars.join(''),
+          })
+          // 3. 清空 chars
+          chars.length = 0
+          // 4. 消费字符
+          str = str.substring(1)
+        }
+        break
+      case State.text:
+        if (isAlpha(char)) {
+          // 1. 如果是字母，则继续保持文本状态
+          currentState = State.text
+          // 2. 将之前的字符缓存到 chars 中
+          chars.push(char)
+          // 3. 消费字符
+          str = str.substring(1)
+        } else if (char === '<') {
+          // 1. 如果是 < 则进入标签开始状态
+          currentState = State.tagOpen
+          // 2. 同时创建一个文本 Token，并添加到 tokens 中
+          tokens.push({
+            type: 'text',
+            content: chars.join(''),
+          })
+          // 3. 清空 chars
+          chars.length = 0
+          // 4. 消费字符
+          str = str.substring(1)
+        }
+        break
+      case State.tagEnd:
+        if (isAlpha(char)) {
+          // 1. 如果是字母，则进入结束标签名称状态
+          currentState = State.tagEndName
+          // 2. 将之前的字符缓存到 chars 中
+          chars.push(char)
+          // 3. 消费字符
+          str = str.substring(1)
+        }
+        break
+      case State.tagEndName:
+        if (isAlpha(char)) {
+          // 1. 如果是字母，则继续保持结束标签名称状态
+          currentState = State.tagEndName
+          // 2. 将之前的字符缓存到 chars 中
+          chars.push(char)
+          // 3. 消费字符
+          str = str.substring(1)
+        } else if (char === '>') {
+          // 1. 如果是 > 则进入初始状态
+          currentState = State.initial
+          // 2. 同时创建一个结束标签 Token，并添加到 tokens 中
+          tokens.push({
+            type: 'tagEnd',
+            name: chars.join(''),
+          })
+          // 3. 清空 chars
+          chars.length = 0
+          // 4. 消费字符
+          str = str.substring(1)
+        }
+        break
+    }
+  }
+  return tokens
+}
+```
+
+使用上面的 `tokenize` 来解析模版 `<p>Vue</p>` 最终得到 3 个 token
+
+```js
+const tokens = tokenize('<p>Vue</p>')
+// tokens 的值为
+// [
+//   { type: 'tag', name: 'p' },
+//   { type: 'text', content: 'Vue' },
+//   { type: 'tagEnd', name: 'p' },
+// ]
+```
+
+可以使用正则表达式来实现 `tokenize` 函数，如下面的代码所示：
+
+```js
+function tokenize(str) {
+  const tagRE = /<(?<type>\/?)(?<tagName>[a-z]+)>/g
+  const endTagRE = /^<\/([a-z]+)>/
+  const textRE = /^[^<]+/
+  const tokens = []
+  while (str) {
+    if (str.startsWith('</')) {
+      const endTagMatch = str.match(endTagRE)
+      if (endTagMatch) {
+        tokens.push({
+          type: 'tagEnd',
+          value: endTagMatch[1],
+        })
+        str = str.substring(endTagMatch[0].length)
+        continue
+      }
+    }
+    if (str.startsWith('<')) {
+      const tagMatch = str.match(tagRE)
+      if (tagMatch) {
+        tokens.push({
+          type: 'tag',
+          value: tagMatch[2],
+        })
+        str = str.substring(tagMatch[0].length)
+        continue
+      }
+    }
+    const textMatch = str.match(textRE)
+    if (textMatch) {
+      tokens.push({
+        type: 'text',
+        value: textMatch[0],
+      })
+      str = str.substring(textMatch[0].length)
+      continue
+    }
+  }
+  return tokens
+}
+```
+
+#### 15.3 构造模板 AST
+
+对于 vue 的 ast，由于 html 的结构是一个树结构，所以 vue 的 ast 生成的 js ast 也是一个树结构，所以可以使用递归的方式来实现。
+首先使用 tokenize 对一个模版进行标记化，
+
+```js
+const tokens = tokenize('<div><p>VUe</p><p>Template</p></div>')
+
+// tokens 的值为
+// [
+//   { type: 'tag', name: 'div' },
+//   { type: 'tag', name: 'p' },
+//   { type: 'text', content: 'Vue' },
+//   { type: 'tagEnd', name: 'p' },
+//   { type: 'tag', name: 'p' },
+//   { type: 'text', content: 'Template' },
+//   { type: 'tagEnd', name: 'p' },
+//   { type: 'tagEnd', name: 'div' },
+```
+
+通过生成的 `tokens` 生成 ast
+中间通过 `elementStack` 进行过渡，简单来说，就是一个栈，用来存储当前节点的父节点，当遇到开始标签时，将当前节点入栈，当遇到结束标签时，将当前节点出栈。
+这样就会在 ast 中生成一个树结构，如下面的代码所示：
+
+```js
+function parse(tokens) {
+  // 用于存储当前节点的父节点
+  const elementStack = []
+  // 用于存储根节点
+  const root = {
+    type: 'root',
+    children: [],
+  }
+  // 当前节点指向根节点
+  let currentElement = root
+  // 遍历 tokens
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]
+    switch (token.type) {
+      case 'tag':
+        // 如果是开始标签，则创建一个元素节点
+        const element = {
+          type: 'element',
+          tag: token.value,
+          children: [],
+          parent: currentElement,
+        }
+        // 将当前节点的父节点指向该元素节点
+        currentElement.children.push(element)
+        // 如果是开始标签，则将当前节点入栈，并将当前节点指向该元素节点
+        elementStack.push(currentElement)
+        currentElement = element
+        break
+      case 'text':
+        // 如果是文本节点，则创建一个文本节点
+        const text = {
+          type: 'text',
+          content: token.value,
+          parent: currentElement,
+        }
+        // 将当前节点的父节点指向该文本节点
+        currentElement.children.push(text)
+        break
+      case 'tagEnd':
+        // 如果是结束标签，则将当前节点出栈
+        elementStack.pop()
+        // 同时将当前节点指向栈顶元素
+        currentElement = elementStack[elementStack.length - 1]
+        break
+    }
+  }
+  return root
+}
+```
+
+#### 15.4 AST 的转换与插件化架构
+
+##### 15.4.1 节点的访问
+
+由于 AST 树的结构，所以可以使用递归的方式来访问每一个节点(使用深度优先的算法)，但是先编写一个 dump 函数用来打印当前 AST 节点的信息。
+
+```js
+function dump(node, indent = 0) {
+  // 节点类型
+  const type = node.type
+  // 节点的描述，如果是 root 节点，则没有描述
+  // 如果是Element 类型的节点，就使用 node.tag 作为描述
+  // 如果是Text 类型的节点，就使用 node.content 作为描述
+  const desc = node.type === 'Root' ? '' : node.type === 'Element' ? node.tag : node.content
+  // 打印节点信息
+  console.log(`${'-'.repeat(indent)}${type}:${desc}`)
+  // string.repeat(count) 其中 string 是要重复的字符串，count 是要重复的次数。这个方法返回一个包含重复字符串的新字符串。这在创建缩进、分隔线或重复某个字符来填充字符串等场景中非常有用。
+  // 递归打印子节点
+  if (node.children) {
+    node.children.forEach(child => {
+      dump(child, indent + 2)
+    })
+  }
+}
+// 使用 dump 函数打印 ast
+const ast = parse(`<div><p>Vue</p><p>Template</p></div>`)
+console.log(dump(ast))
+// 输出结果
+// Root:
+// --Element:div
+// ----Element:p
+// ------Text:Vue
+// ----Element:p
+// ------Text:Template
+```
+
+创建以深度优先的节点访问，
+
+```js
+function traverseNode(ast) {
+  // 当前节点，ast本身就是Root节点
+  const currentNode = ast
+  // 对当前节点进行操作
+  // if(currentNode.type === 'Element' && currentNode.tag === 'p'){
+  //   // 将 p 标签改为 h1 标签
+  //   currentNode.tag = 'h1'
+  // }
+  // 递归访问子节点
+  if (currentNode.children) {
+    currentNode.children.forEach(child => {
+      traverseNode(child)
+    })
+  }
+}
+```
+
+在 `traverseNode` 中可以对不同的节点进行不同的操作，那么是否可以解耦，来抽离这些个性操作，这里使用的是回调函数的方式，将个性化的操作抽离出来，这样就可以实现插件化的架构。
+
+```js
+function traverseNode(ast, context) {
+  const currentNode = ast
+  // context.nodeTransforms 是一个数组，数组中的每一项都是一个函数
+  // 遍历数组，依次执行每一个函数
+  context.nodeTransforms.forEach(transform => {
+    transform(currentNode, context)
+  })
+  // 递归访问子节点
+  if (currentNode.children) {
+    currentNode.children.forEach(child => {
+      traverseNode(child, context)
+    })
+  }
+}
+// transform 函数
+function transform(node, context) {
+  // 创建 context 对象
+  const context = {
+    nodeTransforms: [
+      // 转换标签节点
+      transformElement,
+      // 转换文本节点
+      transformText,
+    ],
+  }
+  // 调用 traverseNode 函数
+  traverseNode(ast, context)
+  console.log(dump(ast))
+}
+
+function transformElement(node, context) {
+  // 如果是 p 标签，则将其改为 h1 标签
+  if (node.type === 'Element' && node.tag === 'p') {
+    node.tag = 'h1'
+  }
+}
+function tranformText(node, context) {
+  // 如果是文本节点，则将其内容改为大写
+  if (node.type === 'Text') {
+    node.content = node.content.toUpperCase()
+  }
+}
+```
+
+##### 15.4.2 转换上下文与节点操作
+
+对于上面的 `context` 对象，明明可以直接使用 `nodeTransforms` 数组，但是为什么会用个对象包裹。这里是为了提供一个上下文：
+
+- 在编写 React 应用时，我们可以使用 `React.createContext` 函数创建一个上下文对象，该上下文对象允许我们将数据通过组件树一层层地传递下去。无论组件树的层级有多深，只要组件在这棵组件树的层级内，那么它就能够访问上下文对象中的数据。
+- 在编写 Vue.js 应用时，我们也可以通过 `provide/inject` 等能力，向一整棵组件树提供数据。这些数据可以称为上下文。
+- 在编写 Koa 应用时，中间件函数接收的 `context` 参数也是一种上 下文对象，所有中间件都可以通过 `context` 来访问相同的数据。
+
+所以这里的 `context` 就是一个全局变量，在转换的过程中，可以通过 `context` 来传递数据。
+
+```js
+function transform(ast) {
+  const context = {
+    nodeTransforms: [transformElement, transformText],
+    // 用来存储当前正在转换的节点
+    currentNode: null,
+    // 用来存储当前节点的在父节点的 children 的索引
+    childIndex: 0,
+    // 当前转换节点的的父节点
+    parent: null,
+  }
+  traverseNode(ast, context)
+  console.log(dump(ast))
+}
+
+function traverseNode(ast, context) {
+  const currentNode = ast
+  // 将当前节点存储到 context 中
+  context.currentNode = currentNode
+  // 对当前节点进行操作
+  context.nodeTransforms.forEach(transform => {
+    transform(currentNode, context)
+  })
+  // 递归访问子节点
+  if (currentNode.children) {
+    currentNode.children.forEach((child, index) => {
+      // 将当前节点的父节点存储到 context 中
+      context.parent = currentNode
+      // 将当前节点在父节点中的索引存储到 context 中
+      context.childIndex = index
+      traverseNode(child, context)
+    })
+  }
+  // 递归访问子节点后，将 parent 和 childIndex 恢复到之前的值
+  context.parent = null
+  context.childIndex = 0
+}
+```
+
+在进行节点转换时，先设置 `context.parent` 和 `context.childIndex`。
+例如在进行节点替换的时候：
+
+```js
+function transform(ast) {
+  const context = {
+    currentNode: null,
+    parent: null,
+    childIndex: 0,
+    replaceNode(node) {
+      // 如果当前节点有父节点，则将新节点添加到父节点的 children 中
+      if (context.parent) {
+        context.parent.children.splice(context.childIndex, 1, node)
+        context.currentNode = node
+      }
+    },
+    nodeTransforms: [transformElement, transformText],
+  }
+  traverseNode(ast, context)
+  console.log(dump(ast))
+}
+```
+
+##### 15.4.3 进入与退出
+
+按照之前的 ast 的遍历深度算法，是按照层级一直到最底层，但是这个时候 `parent` 是执行完成的，无法在回头处理。
+![15-22](./img/vue/15-22.png)
+图 15-22 顺序执行工作流
+理想的情况可以这样：
+![15-23](./img/vue/15-23.png)
+图 15-23 更加理想的转换工作流
+所以节点的转换变成了两个阶段，一个阶段是进入一个是退出，这样就可以在退出的时候。
+所以代码就变成：
+
+```js
+function traverseNode(ast, context) {
+  context.currentNode = ast
+  // 1. 增加退出阶段的回调函数数组
+  const exitFns = []
+  const transforms = context.nodeTransforms
+  for (let i = 0; i < transforms.length; i++) {
+    // 2. 转换函数可以返回另外一个函数，该函数即作为退出阶段的回调函数
+    const onExit = transforms[i](context.currentNode, context)
+    if (onExit) {
+      exitFns.push(onExit)
+    }
+    if (!context.currentNode) {
+      // 如果当前节点被删除，则终止遍历
+      return
+    }
+  }
+  const children = context.currentNode.children
+  if (children) {
+    for (let i = 0; i < children.length; i++) {
+      // 3. 递归遍历子节点
+      traverseNode(children[i], context)
+    }
+  }
+  // 在节点处理的最后阶段执行缓存到exitFns 中的回调函数
+  // 这里要反序执行
+  let i = exitFns.length
+  while (i--) {
+    exitFns[i]()
+  }
+}
+
+function transformElement(node, context) {
+  // 进入节点执行的代码
+  // 返回的函数是退出节点时执行的代码
+  return () => {
+    // 退出节点执行的代码
+  }
+}
+```
+
+#### 15.5 将模板 AST 转换为 `JavaScript` AST
+
+渲染函数是 js 函数，所以将模板 AST 转换为 `JavaScript` AST，就是将模板 AST 转换为 js 函数。
+
+```html
+<div>
+  <p>Vue</p>
+  <p>Template</p>
+</div>
+<script>
+  // 上面的模板对应的渲染函数
+  function render() {
+    return h('div', {}, [h('p', {}, 'Vue'), h('p', {}, 'Template')])
+  }
+</script>
+```
+
+这就是要实现的结果，
+首先使用一个对象描述 `javascript` ast 节点
+
+```js
+const FunctionDelNode = {
+  tyepe: 'FunctionDecl', // 代表该节点是函数申明
+  id: {
+    // 函数的名称
+    type: 'Identifier',
+    name: 'render', // 函数的名称 ,在这里他就是渲染函数的render
+  },
+  params: [], // 函数的参数
+  body: [
+    {
+      // 函数的主体
+      type: 'ReturnStatement',
+      return: null,
+    },
+  ],
+}
+```
+
+- id : 函数的名称,他是一个标识符 `Identifier`。
+- parsm : 函数的参数，他是一个数组。
+- body : 函数体，由于包含多个语句，所以是一个数组。
+
+渲染函数的返回值是一个 `h` 函数调用表达式，所以需要定义一个 `h` 函数调用表达式的节点。
+
+```js
+const CallExp = {
+  type: 'CallExpression', // 代表该节点是函数调用表达式
+  callee: {
+    type: 'Identifier', // 函数调用表达式的名称
+    name: 'h',
+  },
+  arguments: [], // 函数调用表达式的参数
+}
+```
+
+#### 15.6 代码生成
+
+上面生成了一个 `javascript` ast，但是这个 `javascript` ast 并不能直接运行，所以需要将其转换为 `javascript` 代码，这个过程就是代码生成。代码生成也是编译器的最后一步。
+整体流程：
+
+```js
+function compile(template) {
+  // 模版 AST
+  const ast = parse(template)
+  // 将模板 AST 转换为 JavaScript AST
+  transform(ast)
+  // 代码生成，将 JavaScript AST 转换为 JavaScript 代码
+  const code = generate(ast)
+  return code
+}
+```
+
+类似的，代码生成也是需要上下文变量的。
+
+```js
+function generate(node){
+  const context = {
+    // 存储最终生成的渲染函数代码
+    code:'',
+    // 在生成代码时，通过调用 push 函数完成代码的拼接
+    push(code){
+      context.code += code
+    },
+
+    }
+  generateNode(node,context)
+  return context.code
+  }
+}
+```
+
