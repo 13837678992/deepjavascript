@@ -5643,3 +5643,262 @@ function generate(node){
 
 对于 vue 的解析器，其实就是将模版字符串解析为模版 AST，这个过程就是词法分析和语法分析。
 目前对我影响不大，后续在看吧。
+
+### 第 17 章 编译优化
+
+编译优化指的是编译器将模板编译为渲染函数的过程中，尽可能多地提取关键信息，并以此指导生成最优代码的过程。大致思路是将静态内容和动态内容分开，采用不同的思路。
+
+#### 17.1 动态节点收集与补丁标志
+
+##### 17.1.1 传统 diff 算法的问题
+
+传统的 diff 算法是将两个树进行逐层对比，如果两个树的结构相同，但是位置不同，那么就会进行移动操作，这样就会导致一些问题。
+渲染器介绍三种关于传统虚拟 DOM 的 Diff 算法。但无论哪一种 Diff 算法，当它在比对新旧两棵虚拟 DOM 树的时候，总是要按照虚拟 DOM 的层级结构“一层一层”地遍历。举个例子，假设我们有如下模板：
+
+```html
+<div id="foo">
+  <p class="bar">{{ text }}</p>
+</div>
+```
+
+如果用传统的 diff 就会很繁琐。这里只有 `text` 是动态的，如果抛弃这个，也可以直接操作真实 dom，这样还能抛弃虚拟 dom 的消耗，因为渲染器在运行时得不到足够的信息。传统 Diff 算法无法利用编译时提取到的任何关键信息，这导致渲染器在运行时不可能去做相关的优化。而 Vue.js 3 的编译器会将编译时得到的关键信息“附着”在它生成的虚拟 DOM 上，这些信息会通过虚拟 DOM 传递给渲染器。最终，渲染器会根据这些关键信息执行“快捷路径”，从而提升运行时的性能。
+
+##### 17.1.2 Block 与 PatchFlags
+
+所以优化的思路就是将静态内容和动态内容分开，采用不同的思路。
+例如：
+
+```js
+;<div>
+  <div>foo</div>
+  <p>{{ bar }}</p>
+</div>
+
+// 对应的虚拟dom
+const vnode = {
+  tag: 'div',
+  children: [
+    {
+      tag: 'div',
+      children: 'foo',
+    },
+    {
+      tag: 'p',
+      children: ctx.bar,
+    },
+  ],
+}
+// 优化后的虚拟dom 会将静态内容和动态内容分开
+const vnode = {
+  tag: 'div',
+  children: [
+    {
+      tag: 'div',
+      children: 'foo',
+      // 该节点是静态节点
+    },
+    {
+      tag: 'p',
+      children: ctx.bar,
+      // 该节点是动态节点
+      PatchFlags: 1,
+    },
+  ],
+}
+```
+
+通过使用 `PatchFlags` 来标记节点的类型，一般是使用位掩饰码来区分，这里使用数字举例。
+
+- 数字 1: 代表该节点是动态节点，有动态的 textContent
+- 数字 2: 代表该节点是动态节点，有动态的 class
+- 数字 4: 代表该节点是动态节点，有动态的 style
+- 数字 8: 其他...
+
+同时建立映射：
+
+```js
+const PatchFlags = {
+  TEXT: 1,
+  CLASS: 2,
+  STYLE: 4,
+}
+```
+
+那么虚拟 dom 就变成了：
+
+```js
+const vnode = {
+  tag: 'div',
+  children:[
+    {tag:'div',children:'foo'},
+    {tag:'p',children:ctx.bar,PatchFlags:PatchFlags.TEXT}
+  ],
+  // 将 children 中的动态节点提取到 dynamicChildren 中
+  dynamicChildren:[
+    {tag:'p',children:ctx.bar,PatchFlags:PatchFlags.TEXT}
+  ],
+  ],
+}
+```
+
+`dynamicChildren` 就是将所有的 `children` 中的动态节点提取到 `dynamicChildren` 中，这样就可以在 diff 的时候，只对动态节点进行 diff，而不用对静态节点进行 diff。
+收集的是所有 `children` 的动态节点
+
+```js
+;<div>
+  <div>
+    <p>{{ bar }}</p>
+  </div>
+</div>
+const vnode = {
+  tag: 'div',
+  children: [
+    {
+      tag: 'div',
+      children: [
+        {
+          tag: 'p',
+          children: ctx.bar,
+          PatchFlags: PatchFlags.TEXT,
+        },
+      ],
+    },
+  ],
+  dynamicChildren: [
+    {
+      tag: 'p',
+      children: ctx.bar,
+      PatchFlags: PatchFlags.TEXT,
+    },
+  ],
+}
+```
+
+将具有 `dynamicChildren` 属性的虚拟 dom 称为 `Block`，将 `dynamicChildren` 称为 `Block` 的 `children`。这样在更新的时候就不用更新整个的虚拟 dom，只需要更新 `Block` 的 `children` 即可。
+
+那么什么时候才会变成 `block`，
+
+```js
+<template>
+  // 这个div标签是一个block
+    <div>
+      // 这个p 标签不是，因为他不是一个根节点
+      <p>{{ bar }}</p>
+    </div>
+    // 这个 h1 标签是一个 Block
+    <h1>
+      // 这个span也不是，因为他不是一个根节点
+      <span :id='dynamicId'></span>
+    </h1>
+</template>
+```
+
+实际上，除了模板中的根节点需要作为 `Block` 角色之外，任何带 有 `v-for`、`v-if`/`v-else-if`/`v-else` 等指令的节点都需要作为 `Block` 节点，
+
+##### 17.1.3 收集动态节点
+
+在编译器生成的渲染函数代码中，并不会直接包含用来描述虚拟 节点的数据结构，而是包含着用来创建虚拟 DOM 节点的辅助函数，如下面的代码所示：
+
+```js
+render(){
+  return createVNode('div',null,[
+    createVNode('div',null,[
+      createVNode('p',null,[
+        createTextVNode(ctx.bar)
+      ])
+    ])
+  ])
+}
+// create9Node 函数就是用来创建虚拟 DOM 节点的辅助函数，
+function createVNode(tag,props,children){
+  const key = props && props.key
+  props && delete props.key
+  return {
+    tag,
+    props,
+    children,
+    key,
+  }
+}
+
+```
+
+编译器在优化阶段提取的关键信息会影响最终生成的代码，具体体现在用于创建虚拟 DOM 节点的辅助函数上。假设我们有如下模板：
+
+```js
+<div id="foo">
+  <p class="bar">{{ text }}</p>
+</div>
+render(){
+  return createVNode('div',{id:'foo'},[
+    createVNode('p',{class:'bar'},text,PatchFlags.TEXT) // PatchFlags.TEXT 就是补丁标志，就会将他收集到动态节点里面
+  ])
+}
+```
+
+下一步我们要思考的是如何将根节点变成一个 `Block`，以及如何 将动态子代节点收集到该 `Block` 的 `dynamicChildren` 数组中。这里有一个重要的事实，即在渲染函数内，对 `create9Node` 函数的调用是层层的嵌套结构，并且该函数的执行顺序是“内层先执行，外层后 执行”，如图 17-1 所示：
+![17-1](./img/vue/17-1.png)
+图 17-1 由内向外的执行方式
+
+当外层 `createVNode` 函数执行时，内层的 `createVNode` 函数已经执行完毕了。因此，为了让外层 `Block` 节点能够收集到内层动态节点，就需要一个栈结构的数据来临时存储内层的动态节点，如下面的代码所示：
+
+```js
+// 用来存储动态节点的栈
+const dynamicChildrenStack = []
+// 当前动态节点集合
+let currentDynamicChildren = null
+// openBlock 函数用来创建一个 Block 动态节点集合，并将其入栈
+function openBlock() {
+  dynamicChildrenStack.push((currentDynamicChildren = []))
+}
+// closeBlock 函数用来将栈顶的 Block 出栈
+function closeBlock() {
+  currentDynamicChildren = dynamicChildrenStack.pop()
+}
+
+function createVNode(tag, props, children, flags) {
+  const key = props && props.key
+  props && delete props.key
+  // 创建虚拟 DOM 节点
+  const vnode = {
+    tag,
+    props,
+    children,
+    key,
+    patchFlag: flags,
+  }
+  if (typeof flags !== 'undefined' && currentDynamicChildren) {
+    // 将当前节点添加到动态节点集合中
+    currentDynamicChildren.push(vnode)
+  }
+  return vnode
+}
+```
+
+在 `createVNode` 函数内部，检测节点是否存在补丁标志。如果存在，则说明该节点是动态节点，于是将其添加到当前动态节点集合 `currentDynamicChildren` 中。
+
+最后，我们需要重新设计渲染函数的执行方式，如下面的代码所示：
+
+```js
+render(){
+  // 1. 使用 createBlock 代替 createVNode 来创建 Block 节点
+  // 2. 每当调用 createBlock 函数之前，先调用 openBlock 函数
+  return (openBlock(),createBlock('div',null,[
+    createVNode('p',{class:'foo'},null,1),
+    createVNode('p',{class:'bar'},null),
+  ]))
+}
+function createBlock(tag,props,children){
+  // block 本质也是一个虚拟 DOM 节点 vnode
+  const block = createVNode(...arguments)
+  // 将动态节点集合赋值给 block.dynamicChildren
+  block.dynamicChildren = currentDynamicChildren
+  // 关闭 block
+  closeBlock()
+  // 返回 block
+  return block
+}
+
+```
+
+观察渲染函数内的代码可以发现，我们利用逗号运算符的性质来 保证渲染函数的返回值仍然是 `VNode` 对象。这里的关键点是 `createBlock` 函数，任何应该作为 `Block` 角色的虚拟节点，都应该使用该函数来完成虚拟节点的创建。由于 `createVNode` 函数和 `createBlock` 函数的执行顺序是从内向外，所以当 `createBlock` 函数执行时，内层的所有 `createVNode` 函数已经执行完毕了。这时， `currentDynamicChildren` 数组中所存储的就是属于当前 `Block` 的所有动态子代节点。因此，我们只需要将 `currentDynamicChildren` 数组作为 `block.dynamicChildren` 属性的值即可。这样，我们就完成了动态节点的收集。
