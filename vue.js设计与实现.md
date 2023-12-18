@@ -5902,3 +5902,207 @@ function createBlock(tag,props,children){
 ```
 
 观察渲染函数内的代码可以发现，我们利用逗号运算符的性质来 保证渲染函数的返回值仍然是 `VNode` 对象。这里的关键点是 `createBlock` 函数，任何应该作为 `Block` 角色的虚拟节点，都应该使用该函数来完成虚拟节点的创建。由于 `createVNode` 函数和 `createBlock` 函数的执行顺序是从内向外，所以当 `createBlock` 函数执行时，内层的所有 `createVNode` 函数已经执行完毕了。这时， `currentDynamicChildren` 数组中所存储的就是属于当前 `Block` 的所有动态子代节点。因此，我们只需要将 `currentDynamicChildren` 数组作为 `block.dynamicChildren` 属性的值即可。这样，我们就完成了动态节点的收集。
+
+##### 17.1.4 渲染器的运行时支持
+
+有了`dynamicChildren` 属性后，在 dom 进行更新的时候，就可以只对动态节点进行更新。
+改造 `patchElement` 函数
+
+```js
+function patchElement(n1, n2) {
+  const el = (n2.el = n1.el)
+  const oldProps = n1.props || {}
+  const newProps = n2.props || {}
+  //...
+  if (n2.dynamicChildren) {
+    // 1. 如果新旧节点都有动态子代节点，则执行 patchBlock 函数
+    patchBlockChildren(n1, n2, el)
+  } else {
+    // 2. 如果新节点没有动态子代节点，则执行 patchChildren 函数
+    patchChildren(n1, n2, el)
+  }
+}
+function patchBlockChildren(n1, n2, el) {
+  for (let i = 0; i < n2.dynamicChildren.length; i++) {
+    // 3. 遍历新节点的动态子代节点，依次调用 patch 函数
+    patchElement(n1.dynamicChildren[i], n2.dynamicChildren[i])
+  }
+}
+```
+
+#### 17.2 Block 树
+
+除了在根节点会形成 block ，实际上带有结构化指令的节点也会形成 block ，例如 `v-for`、`v-if`/`v-else-if`/`v-else` 等指令的节点都会形成 block ，这些 block 会形成一个树结构，称为 `Block` 树。
+
+##### 17.2.1 带有 v-if 指令的节点
+
+如下模板:
+
+```js
+<div>
+  <section v-if="foo">
+    <p>{{ a }}</p>
+  </section>
+  <section v-else>
+    <div>
+      <p>{{ a }}</p>
+    </div>
+  </section>
+</div>
+
+// block 树
+const block  = {
+  tag:'div',
+  dynamicChildren:[
+    {tag:'section',{key:0},dynamicChildren:[...]}
+  ]
+}
+
+```
+
+自定义指令会让 dom 树变的不稳定，但是可以通过 `key` 来进行判断，例如 `v-if/v-else` 的 `key` 是相同的，那么就可以认为他是同一个节点。
+
+##### 17.2.2 带有 v-for 指令的节点
+
+对于 `v-for` 指令，其实就是将一个节点复制多份，然后将数据绑定到每一个节点上，所以对于动态节点而言，如果他们的 `key` 也相同，那么就会造成不稳定的情况。
+
+```js
+// list 是一个数组 [1,2,3] 变化为 [1]
+<div>
+  <p v-for="item in list">
+   {{ item }}
+  </p>
+  <i>{{ foo }}</i>
+  <i>{{ bar }}</i>
+</div>
+// block 树
+// 更新前
+const prevBlock = {
+  tag: 'div',
+  dynamicChildren: [
+    { tag: 'p', children:1 , 1 /* TEXT */ },
+    { tag: 'p', children:2 , 1 /* TEXT */ },
+    { tag: 'p', children:3 , 1 /* TEXT */ },
+    { tag: 'i', children:ctx.foo , 1 /* TEXT */ },
+    { tag: 'i', children:ctx.bar , 1 /* TEXT */ },
+  ],
+}
+
+// 更新后
+const nextBlock = {
+  tag: 'div',
+  dynamicChildren: [
+    { tag: 'p', children:1 , 1 /* TEXT */ },
+    { tag: 'i', children:ctx.foo , 1 /* TEXT */ },
+    { tag: 'i', children:ctx.bar , 1 /* TEXT */ },
+  ],
+}
+// Fragment 树
+const block = {
+  tag: 'div',
+  dynamicChildren: [
+    { tag: 'Fragment', dynamicChildren: [] },
+    { tag: 'i', children:ctx.foo , 1 /* TEXT */ },
+    { tag: 'i', children:ctx.bar , 1 /* TEXT */ },
+  ],
+}
+```
+
+这里的 `dynamicChildren` 的更新并不是单纯的 `diff` 算法，因为这里的层级并不是和 dom 的结构一致。所以就是保证这里的结构的一致性：使用 `Fragment` 来处理，保证在前后的 block 树的结构一致。
+
+##### 17.2.3 Fragment 的稳定性
+
+```js
+// list 是一个数组 [1,2] 变化为 [1]
+<p v-for="item in list"> {{ item }}</p>
+// 更新前
+const prevBlock = {
+  tag: 'Fragment',
+  dynamicChildren: [
+    { tag: 'p', children:1 , 1 /* TEXT */ },
+    { tag: 'p', children:2 , 1 /* TEXT */ },
+  ],
+}
+// 更新后
+const nextBlock = {
+  tag: 'Fragment',
+  dynamicChildren: [
+    { tag: 'p', children:1 , 1 /* TEXT */ },
+  ],
+}
+```
+
+这样会造成结构和数量不一致的情况，这个时候需要使用原始的 `diff` 算法来进行处理。也就是 `Fragment` 的 `children` 进行 `diff` 。
+
+#### 17.3 静态提升
+
+除了使用 `block` 进行优化，还可以使用静态提升来进行优化，它能够减少更新时创建虚拟 DOM 带来的性能开销和内存占用，静态提升就是将静态节点提取到渲染函数外部，这样就可以减少渲染函数的执行次数。
+
+```js
+<div>
+  <p>static text</p>
+  <p>{{ title }}</p>
+</div>
+// 初始
+function render(){
+  return (openBlock(),createBlock('div',null,[
+    createVNode('p',null,'static text'),
+    createVNode('p',null,ctx.title),1 /* TEXT */)
+  ])
+}
+// 进行静态提升之后
+const hoist1 = createVNode('p',null,'static text')
+function render(){
+  return (openBlock(),createBlock('div',null,[
+    hoist1,
+    createVNode('p',null,ctx.title,1) /* TEXT */)
+  ])
+}
+
+```
+
+静态提升是以树的形式进行的，并非是节点
+
+```js
+<div>
+  <section>
+    <p>
+      <span>static text</span>
+    </p>
+  </section>
+</div>
+```
+
+这里如果进行静态提升，那么除了 div 作为根节点，其他的都会被提升，如果将静态数据变成动态数据，那么整棵树都不进行提升。
+但是这种情况也是有进行优化，其实大体的逻辑还是一样的，将静态和动态进行分开。所以就可以对动态数据进行优化，除了当前的 `data` 还有 `props` 可以优化，
+
+```js
+;<div>
+  <p foo="bar" a="b"></p>
+</div>
+const hoistProp = { foo: 'bar', a: 'b' }
+function render() {
+  return openBlock(), createBlock('div', null, [createVNode('p', hoistProp, ctx.title)])
+}
+```
+
+#### 17.4 预字符串化
+
+```js
+;<div>
+  <p></p>
+  <p></p>
+  // 20个p标签
+  <p></p>
+</div>
+const hoistStatic = createStaticVNode('<p></p><p></p> ... 20个 ...<p></p>')
+function render() {
+  return openBlock(), createBlock('div', null, [hoistStatic])
+}
+```
+
+通过预字符串处理后：
+
+- 大块的内容可以通过 `innerHTML` 来进行渲染，减少了 dom 的操作
+- 减少 dom 创建的消耗
+- 减少内存的消耗
