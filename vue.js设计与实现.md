@@ -6106,3 +6106,76 @@ function render() {
 - 大块的内容可以通过 `innerHTML` 来进行渲染，减少了 dom 的操作
 - 减少 dom 创建的消耗
 - 减少内存的消耗
+
+#### 17.5 缓存内联事件处理函数
+
+简单来说就是对内联事件进行缓存，例如：
+
+```js
+<Comp @change="a+b"/>
+// 编译后
+// 对于内联的事件，编译器会将其转换为一个函数，然后将该函数作为参数传递给组件
+function render(ctx){
+  return h(Comp,{
+    onChange:($event)=>{
+      return ctx.a+ctx.b
+    }
+  })
+}
+```
+
+而对于函数，每次的更新都会重新生成，所以可以对其进行缓存尤其是更新前后值不会变化的。
+所以 `render` 就变成了：
+
+```js
+function render(ctx, cache) {
+  return h(Comp, {
+    onChange:
+      cache[0] ||
+      (cache[0] = $event => {
+        return ctx.a + ctx.b
+      }),
+  })
+}
+```
+
+渲染函数的第二个参数是一个数组 `cache` ，该数组来自组件实例，我们可以把内联事件处理函数添加到 `cache` 数组中。这样，当渲染函数重新执行并创建新的虚拟 DOM 树时，会优先读取缓存中的事件处理函数。这样，无论执行多少次渲染函数， `props` 对象中 `onChange` 属性的值始终不变，于是就不会触发 `Comp` 组件更新了。
+
+#### 17.6 v-once
+
+Vue.js 3 不仅会缓存内联事件处理函数，配合 `v-once` 还可实现对 虚拟 DOM 的缓存。Vue.js 2 也支持 `v-once` 指令，当编译器遇到 `v-once` 指令时，会利用我们上一节介绍的 `cache` 数组来缓存渲染函数的全部或者部分执行结果，如下面的模板所示：
+
+```js
+;<section>
+  <div v-once> {{ foo }}</div>
+</section>
+// 这里的模板虽然有动态节点标记，但是同时也被 v-once 标记为静态节点。但是这里的静态节点并不是指的是静态提升，而是指的是不会进行更新的节点。所以div标签：
+function render(ctx, cache) {
+  return (
+    openBlock(),
+    createBlock('div', null, [
+      cache[1] || (cache[1] = createVNode('div', null, ctx.foo, 1 /* TEXT */)),
+    ])
+  )
+}
+```
+
+被缓存的节点就不会参与后续的更新了（diff），这样就可以减少 dom 的操作。
+
+```js
+render(ctx,cache){
+  return (openBlock(),createBlock('div',null,[
+    (cache[1] || (
+      setBlockTracking(-1),// 阻止这段VNode 被 block 标记
+      cache[1]=h('div',null,ctx.foo,1/* TEXT */),
+      setBlockTracking(1),// 恢复 block 标记
+      cache[1]
+      ))
+  ]))
+}
+```
+因为被阻止进行 `block` 进行收集，所以不会进行 `block` 的收集，所以不会进行 `diff` 操作。一般来说，会使用 `v-once` 进行收集的节点，都是不会进行更新的节点，所以这样就可以减少 dom 的操作。
+所以 `v-once` 从两个方面进行优化（真实dom 和虚拟dom）：
+- 避免组件更新时重新创建虚拟 DOM 带来的性能开销。因为虚拟 DOM 被缓存了，所以更新时无须重新创建。
+- 避免无用的 Diff 开销。这是因为被 `v-once `标记的虚拟 DOM 树 不会被父级 `Block` 节点收集。
+
