@@ -6174,8 +6174,311 @@ render(ctx,cache){
   ]))
 }
 ```
+
 因为被阻止进行 `block` 进行收集，所以不会进行 `block` 的收集，所以不会进行 `diff` 操作。一般来说，会使用 `v-once` 进行收集的节点，都是不会进行更新的节点，所以这样就可以减少 dom 的操作。
-所以 `v-once` 从两个方面进行优化（真实dom 和虚拟dom）：
+所以 `v-once` 从两个方面进行优化（真实 dom 和虚拟 dom）：
+
 - 避免组件更新时重新创建虚拟 DOM 带来的性能开销。因为虚拟 DOM 被缓存了，所以更新时无须重新创建。
 - 避免无用的 Diff 开销。这是因为被 `v-once `标记的虚拟 DOM 树 不会被父级 `Block` 节点收集。
 
+#### 17.7 总结
+
+除了进行 `block` 的优化，还可以进行静态提升、预字符串化、缓存内联事件处理函数、`v-once` 等优化。这些优化都是在编译阶段进行的，所以在运行时不会有额外的开销。
+
+- 静态提升：能够减少更新时创建虚拟 DOM 带来的性能开销和内存占用。
+- 预字符串化：在静态提升的基础上，对静态节点进行字符串化。 这样做能够减少创建虚拟节点产生的性能开销以及内存占用。
+- 缓存内联事件处理函数：避免造成不必要的组件更新。
+- v-once 指令：缓存全部或部分虚拟节点，能够避免组件更新时重新创建虚拟 DOM 带来的性能开销，也可以避免无用的 Diff 操作。
+
+## 第六篇 服务端渲染
+
+### 第 18 章 同构渲染
+
+Vue.js 可以用于构建客户端应用程序，组件的代码在浏览器中运行，并输出 DOM 元素。同时，Vue.js 还可以在 node.js 环境中运行， 它可以将同样的组件渲染为字符串并发送给浏览器。这实际上描述了 Vue.js 的两种渲染方式，即 （client-side rendering， CSR），以及 （server-side rendering，SSR）。另外， Vue.js 作为现代前端框架，不仅能够独立地进行 CSR 或 SSR，还能够将两者结合，形成所谓的 （isomorphic rendering）。本章，我们将讨论 CSR、SSR 以及同构渲染之间的异同，以及 Vue.js 同构渲染的实现机制
+
+#### 18.1 CSR、SSR 与同构渲染
+
+![18-1](./img/vue/18-1.png)
+图 18-1 服务端渲染的工作流程
+(1) 用户通过浏览器请求站点。
+(2) 服务器请求 API 获取数据。
+(3) 接口返回数据给服务器。
+(4) 服务器根据模板和获取的数据拼接出最终的 HTML 字符串。
+(5) 服务器将 HTML 字符串发送给浏览器，浏览器解析 HTML 内 容并渲染。
+后来以 AJAX;为代表，催生了 Web 2.0。在这个阶段，大量的 SPA（single-page application）诞生，也就是接下来我们要介绍的 CSR 技术。与 SSR 在服务端完成模板和数据的融合不同，CSR 是在浏览器 中完成模板与数据的融合，并渲染出最终的 HTML 页面。图 18-2 给出 了 CSR 的详细工作流程。
+![18-2](./img/vue/18-2.png)
+图 18-2 CSR 的工作流程
+
+- 客户端向服务器或 CDN 发送请求，获取静态的 HTML 页面。注意，此时获取的 HTML 页面通常是空页面。在 HTML 页面中，会 包含 `<style>`、`<link>` 和 `<script>` 等标签。例如：
+  ```html
+  <!DOCTYPE html>
+  <html lang="zh">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=devive-width,initial-scale=1.0" />
+      <title>My App</title>
+      <link rel="stylesheet" href="/dist/app.css" />
+    </head>
+    <body>
+      <div id="app"></div>
+      <script src="/dist/app.js"></script>
+    </body>
+  </html>
+  ```
+  这是一个包含` <link rel "stylesheet">` 与 `<script>` 标签的空 HTML 页面。浏览器在得到该页面后，不会渲染出任何内容，所以从用户的视角看，此时页面处于“白屏”阶段。
+- 虽然 HTML 页面是空的，但浏览器仍然会解析 HTML 内容。由于 HTML 页面中存在 `<link rel "stylesheet">` 和 `<script>`等标签，所以浏览器会加载 HTML 中引用的资源，例如 app.css 和 app.js。接着，服务器或 CDN 会将相应的资源返回给浏览器，浏 览器对 CSS 和 `JavaScript` 代码进行解释和执行。因为页面的渲染 任务是由 `JavaScript` 来完成的，所以当 `JavaScript` 被解释和执行 后，才会渲染出页面内容，即“白屏”结束。但初始渲染出来的内 容通常是一个“骨架”，因为还没有请求 API 获取数据。
+- 客户端再通过 AJA; 技术请求 API 获取数据，一旦接口返回数 据，客户端就会完成动态内容的渲染，并呈现完整的页面。
+
+当用户再次通过点击“跳转”到其他页面时，浏览器并不会真正的 进行跳转动作，即不会进行刷新，而是通过前端路由的方式动态地渲 染页面，这对用户的交互体验会非常友好。但很明显的是，与 SSR 相 比，CSR 会产生所谓的“白屏”问题。实际上，CSR 不仅仅会产生白屏问题，它对 SEO（搜索引擎优化）也不友好。表 18-1 从多个方面比较 了 SSR 与 CSR。
+表 18-1 SSR 与 CSR 的比较
+![表18-1](./img/vue/tabel18-1.png)
+SSR 和 CSR 各有优缺点。同构渲染将两者结合在一起，同构渲染分为首次渲染（即首次访问或刷新页面）以及非首次渲染。图 18-3 给出了同构渲染首次渲染的工作流程。
+![18-3](./img/vue/18-3.png)
+图 18-3 真实 DOM 与虚拟 DOM 的关系
+实际上，同构渲染中的首次渲染与 SSR 的工作流程是一致的。也 就是说，当首次访问或者刷新页面时，整个页面的内容是在服务端完 成渲染的，浏览器最终得到的是渲染好的 HTML 页面。但是该页面是 纯静态的，这意味着用户还不能与页面进行任何交互，因为整个应用 程序的脚本还没有加载和执行。另外，该静态的 HTML 页面中也会包 含 `<link>`、`<script>`等标签。除此之外，同构渲染所产生的 HTML 页面与 SSR 所产生的 HTML 页面有一点最大的不同，即前者会 包含当前页面所需要的初始化数据。直白地说，服务器通过 API 请求 的数据会被序列化为字符串，并拼接到静态的 HTML 字符串中，最后 一并发送给浏览器。这么做实际上是为了后续的激活操作，后文会详细讲解。假设浏览器已经接收到初次渲染的静态 HTML 页面，接下来浏览 器会解析并渲染该页面。在解析过程中，浏览器会发现 HTML 代码中 存在 `<link>` 和 `<script>` 标签，于是会从 CDN 或服务器获取相应的资源，这一步与 CSR 一致。当 `JavaScript` 资源加载完毕后，会进行激活操作，这里的激活就是我们在 Vue.js 中常说的 “hydration”。激活 包含两部分工作内容。
+
+- Vue.js 在当前页面已经渲染的 DOM 元素以及 Vue.js 组件所渲染的 虚拟 DOM 之间建立联系。
+- Vue.js 从 HTML 页面中提取由服务端序列化后发送过来的数据， 用以初始化整个 Vue.js 应用程序。
+
+激活完成后，整个应用程序已经完全被 Vue.js 接管为 CSR 应用程 序了。后续操作都会按照 CSR 应用程序的流程来执行。当然，如果刷新页面，仍然会进行服务端渲染，然后再进行激活，如此往复。
+
+#### 18.2 将虚拟 DOM 渲染为 HTML 字符串
+
+这里主要是服务端渲染即 SSR 的实现，这里的实现是基于 `node.js` 的。
+渲染的流程就是将虚拟 dom 渲染成字符串，
+
+```js
+const ElementVNode = {
+  type: 'div',
+  props: {
+    id: 'foo',
+  },
+  children: [
+    {
+      type: 'p',
+      props: null,
+      children: 'hello',
+    },
+  ],
+}
+function renderElementVNode(vnode) {
+  const { type: tag, props, children } = vnode
+  // 开始标签的头部
+  let ret = `<${tag}`
+  // 处理标签的属性
+  if (props) {
+    for (const key in props) {
+      ret += ` ${key}="${props[key]}"`
+    }
+  }
+  // 开始标签的尾部
+  ret += '>'
+  // 处理子节点
+  if (Array.isArray(children)) {
+    children.forEach(child => {
+      if (typeof child === 'string') {
+        ret += child
+      } else {
+        ret += renderElementVNode(child)
+      }
+    })
+  } else if (typeof children === 'string') {
+    ret += children
+  }
+  // 结束标签
+  ret += `</${tag}>`
+  return ret
+}
+```
+
+`renderElementVNode` 函数的实现仅仅 用来展示将虚拟 DOM 渲染为 HTML 字符串的核心原理，并不满足产要求，因为它存在以下几点缺陷。
+
+- `renderElementVNode` 函数在渲染标签类型的虚拟节点时，还需要考虑该节点是否是自闭合标签。
+- 对于属性（props）的处理会比较复杂，要考虑属性名称是否合法，还要对属性值进行 HTML 转义。
+- 子节点的类型多种多样，可能是任意类型的虚拟节点，如 Fragment、组件、函数式组件、文本等，这些都需要处理。
+- 标签的文本子节点也需要进行 HTML 转义。
+
+这里具体的就不讨论了，属于边界问题。
+
+#### 18.3 将组件渲染为 HTML 字符串
+
+略
+
+#### 18.4 客户端激活的原理
+
+对于同构渲染来说，组件的代码会在服务端和客户端分别执行一次。在服务端，组件会被渲染为静态的 HTML 字符串，然后发送给浏览器，浏览器再把这段纯静态的 HTML 渲染出来。这意味着，此时页面中已经存在对应的 DOM 元素。同时，该组件还会被打包到一个 `JavaScript` 文件中，并在客户端被下载到浏览器中解释并执行。这时问题来了，当组件的代码在客户端执行时，会再次创建 DOM 元素吗？答案是“不会”。由于浏 览器在渲染了由服务端发送过来的 HTML 字符串之后，页面中已经存 在对应的 DOM 元素了，所以组件代码在客户端运行时，不需要再次创建相应的 DOM 元素。但是，组件代码在客户端运行时，仍然需要做两件重要的事：
+
+- 在页面中的 DOM 元素与虚拟节点对象之间建立联系；
+- 为页面中的 DOM 元素添加事件绑定。
+
+我们用代码模拟从服务端渲染到客户端激活的整个过程，如下所示：
+
+```js
+// html 代表由服务端渲染的 HTML 字符串
+const html = renderComponentVNode(compVNode)
+// 假设客户端已经拿到了由服务端渲染的 HTML 字符串
+// 获取挂载点
+const container = document.getElementById('app')
+// 将 HTML 字符串渲染到挂载点
+container.innerHTML = html
+// 调用 hydrate 函数完成激活
+hydrate(compVNode, container)
+```
+
+与 `renderer.render` 函数一样，`renderer.hydrate` 函数也是渲染器的一部分，因此它也会作为 `createRenderer` 函数的返回值。
+真实 DOM 元素与虚拟 DOM 对象都是树型结 构，并且节点之间存在一一对应的关系。因此，我们可以认为它们是 “同构”的。而激活的原理就是基于这一事实，递归地在真实 DOM 元素 与虚拟 DOM 节点之间建立关系。另外，在虚拟 DOM 中并不存在与容 器元素（或挂载点）对应的节点。因此，在激活的时候，应该从容器 元素的第一个子节点开始，如下面的代码所示：
+
+```js
+function hydrate(vnode, container) {
+  // 获取容器元素的第一个子节点
+  const ele = container.firstChild
+  // 递归地完成激活
+  return hydrateNode(ele, vnode)
+}
+```
+
+其中， `hydrateNode` 函数接收两个参数，分别是真实 DOM 元素 和虚拟 DOM 元素。 `hydrateNode` 函数的具体实现如下：
+
+```js
+function hydrateNode(node, vnode) {
+  const { type } = vnode
+  // 1. 让虚拟 DOM 元素与真实 DOM 元素建立联系
+  vnode.el = node
+  // 2. 根据虚拟 DOM 元素的类型，分别处理
+  if (typeof type === 'object') {
+    mountComponent(vnode, container, null)
+  } else if (typeof type === 'string') {
+    // 3. 检查真实 DOM 元素的类型是否与虚拟 DOM 元素的类型相同
+    if (node.nodeType !== 1) {
+      console.log('无法完成激活：真实 DOM 元素与虚拟 DOM 元素的类型不匹配')
+    } else {
+      hydrateElement(node, vnode)
+    }
+  }
+  return node.nextSibling
+}
+// hydrateElement 函数简单来说就是将dom所拥有的属性进行更新到真实dom上
+function hydrateElement(node, vnode) {
+  // 1. 为dom元素添加事件
+  if (vnode.props) {
+    for (const key in vnode.props) {
+      const onRE = /^on[^a-z]/
+      if (onRE.test(key)) {
+        patchProps(el, key, null, vnode.props[key])
+      } else {
+        node.setAttribute(key, vnode.props[key])
+      }
+    }
+  }
+  // 2. 递归地激活子节点
+  if (Array.isArray(vnode.children)) {
+    let nextNode = el.firstChild
+    const len = vnode.children.length
+    vnode.children.forEach((vnodeChild, i) => {
+      hydrateNode(nextNode, vnodeChild)
+    })
+  }
+}
+```
+
+`hydrateElement` 函数有两个关键点。
+
+- 因为服务端渲染是忽略事件的，浏览器只是渲染了静态的 HTML 而已，所以激活 DOM 元素的操作之一就是为其添加事件处理程序。
+- 递归地激活当前元素的子节点，从第一个子节点 `el.firstChild` 开始，递归地调用 `hydrateNode` 函数完成激活。注意这里的小技巧， `hydrateNode` 函数会返回当前节点的下一个兄弟节点，利用这个特点即可完成所有子节点的处理。
+
+#### 18.5 编写同构的代码
+
+“同构”一词指的是一份代码既 在服务端运行，又在客户端运行。因此，在编写组件代码时，应该额 外注意因代码运行环境的不同所导致的差异。
+
+##### 18.5.1 组件的生命周期
+
+我们知道，当组件的代码在服务端运行时，由于不会对组件进行真正的挂载操作，即不会把虚拟 DOM 渲染为真实 DOM 元素，所以组件的 `beforeMount` 与 `mounted` 这两个钩子函数不会执行。又因为服务端渲染的是应用的快照，所以不存在数据变化后的重新渲染，因此，组件的 `before8pdate` 与 `updated` 这两个钩子函数也不会执行。另外，在服务端渲染时，也不会发生组件被卸载的情况，所以组 件的 `beforeUnmount` 与 `unmounted` 这两个钩子函数也不会执行。 实际上，只有 `beforeCreate` 与 `created` 这两个钩子函数会在服务 端执行，所以当你编写组件代码时需要额外注意。如下是一段常见的问题代码：
+
+```js
+<script>
+  export default {
+    created(){
+      this.time = setInterval(()=>{
+        this.count++
+      },1000)
+    },
+    beforeUnmount(){
+      clearInterval(this.time)
+    }
+
+  }
+</script>
+```
+
+如果在客户端运行这段代码，并不会产生任何问题；但如果在服务端运行，则会造成内存泄漏。因为 `beforeUnmount` 钩子函数不会在服务端运行，所以这个定时器将永远不会被清除。
+实际上，在 `created` 钩子函数中设置定时器对于服务端渲染没有任何意义。这是因为服务端渲染的是应用程序的快照，所谓快照，指的是在当前数据状态下页面应该呈现的内容。所以，在定时器到时， 修改数据状态之前，应用程序的快照已经渲染完毕了。所以我们说，在服务端渲染时，定时器内的代码没有任何意义。遇到这类问题时， 我们通常有两个解决方案：
+
+- 方案一：将创建定时器的代码移动到 `mounted` 钩子中，即只在客户端执行定时器；
+- 方案二：使用环境变量包裹这段代码，让其不在服务端运行。
+
+方案一应该很好理解，而方案二依赖项目的环境变量。例如，在 通过 webpack 或 Vite 等构建工具搭建的同构项目中，通常带有这种环境变量。以 Vite 为例，我们可以使用 `import.meta.env.SSR` 来判断当前代码的运行环境：
+
+```js
+<script>
+export default {
+  created(){
+    if(!import.meta.env.SSR){
+      this.time = setInterval(()=>{
+        this.count++
+      },1000)
+    }
+  },
+  beforeUnmount(){
+    clearInterval(this.time)
+  }
+}
+</script>
+```
+
+##### 18.5.2 使用跨平台的 API
+
+编写同构代码的另一个关键点是使用跨平台的 API。由于组件的代码既运行于浏览器，又运行于服务器，所以在编写代码的时候要避免使用平台特有的 API。例如，仅在浏览器环境中才存在的 `window` 、 `document` 等对象。然而，有时你不得不使用这些平台特有的 API。 这时你可以使用诸如 `import.meta.env.SSR` 这样的环境变量来做代码守卫：
+
+```js
+<script>
+  if(!import.meta.env.SSR)
+  {
+    // 仅在浏览器环境中才会执行的代码
+    window.xxx
+  }
+  export default{' '}
+  {
+    // ...
+  }
+</script>
+```
+
+##### 18.5.3 只在某一端引入模块
+
+通常情况下，我们自己编写的组件的代码是可控的，这时我们可 以使用跨平台的 API 来保证代码“同构”。然而，第三方模块的代码非常不可控。例如有些组件用到了 `window.localStorage`，对于这些就需要提前做好条件守卫，
+
+##### 18.5.5 <ClientOnly>组件
+
+用来包裹只在客户端运行的代码，这个组件的实现很简单，就是在服务端渲染的时候返回一个空的虚拟节点，而在客户端渲染的时候返回子节点。原理就是在只用客户端才能执行的生命周期中，将子节点进行渲染，而在服务端渲染的时候，不进行渲染。
+
+```js
+<template>
+  <ClientOnly>
+    // 这里的代码只会在客户端进行渲染
+    <SsrIncompatibleCop/>
+  </ClientOnly>
+</template>
+// ClientOnly 组件的实现
+<script>
+  import { ref, onMounted, defineComponent } from 'vue'
+  export const ClientOnly = defineComponent({
+    setup(props, { slots }) {
+      const show = ref(false)
+      onMounted(() => {
+        show.value = true
+      })
+      return () => (show.value ? slots.default() : null)
+    },
+  })
+</script>
+```
