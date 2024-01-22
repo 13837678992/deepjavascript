@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>耗时任务演示</title>
+    <style>
+        /* 简单的动画样式 */
+        .spinner {
+            width: 40px;
+            height: 40px;
+            background-color: #333;
+            margin: 100px auto;
+            animation: spin 1s infinite linear;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+<div class="spinner"></div>
+<button id="startButton">执行耗时任务</button>
+
+<script>
+
+    // 主线程中的代码
+    document.getElementById('startButton').addEventListener('click', function() {
+        if (window.Worker) {
+            const myWorker = new Worker('worker.js');
+
+            myWorker.postMessage('start');
+
+            myWorker.onmessage = function(e) {
+                console.log('任务完成:', e.data);
+            };
+        } else {
+            console.log('您的浏览器不支持 Web Workers。');
+        }
+    });
+</script>
+</body>
+</html>
