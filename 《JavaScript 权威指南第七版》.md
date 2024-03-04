@@ -1233,6 +1233,7 @@ function zipOther(...arr) {
 zipOther(oneDigitPrimes(), [0], "ab") // => [2,,0"a",3,"b",5,7]
 ```
 > 迭代一个可迭代的对象并产生每个结果值。
+
 ```js
 function* oneDigitPrimes() {
     yield 2;
@@ -1338,18 +1339,18 @@ function fetchSequentially(urls) {
 #### 13.4.3 异步生成器
 > 使用异步生成器和 `for/await` 循环代替 `setInterval()` 回调函数以固定的间隔重复运行代码
 ```js
-
+let a = 1
 function elapsedTime(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(()=> resolve(a++), ms));
 }
 async function* clock(interval, max=Infinity) {
-    for(let count = 1; count <= max; count++) { 
-        await elapsedTime(interval);            
-        yield count;                            
+    for(let count = 1; count <= max; count++) {
+        let res = await elapsedTime(interval);
+        yield res;
     }
 }
-async function test() {                       
-    for await (let tick of clock(300, 100)) { 
+async function test() {
+    for await (let tick of clock(300, 10)) {
         console.log(tick);
     }
 }
